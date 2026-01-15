@@ -1,0 +1,63 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>Stunstick</AssemblyName>
+    <Product>Stunstick</Product>
+    <UsedAvaloniaProducts></UsedAvaloniaProducts>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\\Stunstick.App\\Stunstick.App.csproj" />
+    <ProjectReference Include="..\\Stunstick.SteamPipe\\Stunstick.SteamPipe.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.10" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.10" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.10" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.10" />
+  </ItemGroup>
+
+  <Target Name="CopySteamPipeToOutput" AfterTargets="Build">
+    <PropertyGroup>
+      <_SteamPipeOutput>$(MSBuildProjectDirectory)/../Stunstick.SteamPipe/bin/$(Configuration)/$(TargetFramework)/</_SteamPipeOutput>
+    </PropertyGroup>
+    <ItemGroup>
+      <_SteamPipeFiles Include="$(_SteamPipeOutput)**/*" />
+    </ItemGroup>
+    <Copy
+      SourceFiles="@(_SteamPipeFiles)"
+      DestinationFiles="@(_SteamPipeFiles->'$(OutputPath)%(RecursiveDir)%(Filename)%(Extension)')"
+      SkipUnchangedFiles="true"
+      Condition="'@(_SteamPipeFiles)' != ''" />
+  </Target>
+
+  <Target Name="CopyBundledStudioMdlToOutput" AfterTargets="Build">
+    <PropertyGroup>
+      <_BundledStudioMdlRoot>$(MSBuildProjectDirectory)/../../tools/studiomdl/bin/</_BundledStudioMdlRoot>
+    </PropertyGroup>
+    <ItemGroup>
+      <_BundledStudioMdlFiles Include="$(_BundledStudioMdlRoot)**/*" />
+    </ItemGroup>
+    <Copy
+      SourceFiles="@(_BundledStudioMdlFiles)"
+      DestinationFiles="@(_BundledStudioMdlFiles->'$(OutputPath)tools/studiomdl/bin/%(RecursiveDir)%(Filename)%(Extension)')"
+      SkipUnchangedFiles="true"
+      Condition="'@(_BundledStudioMdlFiles)' != ''" />
+  </Target>
+
+  <Target Name="CopyBundledStudioMdlToPublish" AfterTargets="Publish">
+    <PropertyGroup>
+      <_BundledStudioMdlRoot>$(MSBuildProjectDirectory)/../../tools/studiomdl/bin/</_BundledStudioMdlRoot>
+    </PropertyGroup>
+    <ItemGroup>
+      <_BundledStudioMdlFiles Include="$(_BundledStudioMdlRoot)**/*" />
+    </ItemGroup>
+    <Copy
+      SourceFiles="@(_BundledStudioMdlFiles)"
+      DestinationFiles="@(_BundledStudioMdlFiles->'$(PublishDir)tools/studiomdl/bin/%(RecursiveDir)%(Filename)%(Extension)')"
+      SkipUnchangedFiles="true"
+      Condition="'@(_BundledStudioMdlFiles)' != '' and '$(PublishDir)' != ''" />
+  </Target>
+</Project>

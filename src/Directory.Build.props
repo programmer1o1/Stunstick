@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+
+    <!-- Keep builds predictable across environments (nested MSBuild parallelism can be flaky). -->
+    <BuildInParallel Condition="'$(BuildInParallel)' == ''">false</BuildInParallel>
+
+    <!-- Disable NuGet audit by default (can be re-enabled via /p:NuGetAudit=true). -->
+    <NuGetAudit Condition="'$(NuGetAudit)' == ''">false</NuGetAudit>
+  </PropertyGroup>
+</Project>

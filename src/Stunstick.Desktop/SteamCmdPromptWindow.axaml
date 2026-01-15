@@ -1,0 +1,17 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Stunstick.Desktop.SteamCmdPromptWindow"
+        Width="420"
+        SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Title="SteamCMD">
+  <StackPanel Margin="12" Spacing="10">
+    <TextBlock x:Name="MessageTextBlock" TextWrapping="Wrap" />
+    <TextBox x:Name="ResponseTextBox" />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Content="OK" IsDefault="True" Click="OnOkClicked" />
+      <Button Content="Cancel" IsCancel="True" Click="OnCancelClicked" />
+    </StackPanel>
+  </StackPanel>
+</Window>

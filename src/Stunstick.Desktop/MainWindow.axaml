@@ -1,0 +1,1265 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:desktop="clr-namespace:Stunstick.Desktop"
+        x:Class="Stunstick.Desktop.MainWindow"
+        Title="Stunstick"
+        Width="1200"
+        Height="700"
+        MinWidth="900"
+        MinHeight="600">
+  <Grid RowDefinitions="*,Auto,Auto" Margin="12" RowSpacing="8">
+	    <TabControl Grid.Row="0" x:Name="MainTabControl">
+	      <TabItem x:Name="InspectTabItem" Header="Inspect">
+	        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+	        <StackPanel Spacing="8" Margin="8">
+	          <TextBlock FontSize="16" Text="Inspect (VPK/FPX/MDL details + file info)" />
+		          <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+	            <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Path" />
+	            <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+	              <TextBox x:Name="InspectPathTextBox" Watermark="path/to/file_or_folder" />
+	              <Button Grid.Column="1" Content="Browse file" Click="OnBrowseInspectPathClicked" />
+	              <Button Grid.Column="2" Content="Browse folder" Click="OnBrowseInspectPathFolderClicked" />
+	            </Grid>
+
+	            <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Text="SHA256" />
+	            <CheckBox Grid.Row="1" Grid.Column="1" x:Name="InspectSha256CheckBox" Content="Compute SHA256" IsChecked="True" />
+
+	            <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Text="MDL version" />
+	            <ComboBox Grid.Row="2"
+	                      Grid.Column="1"
+	                      x:Name="InspectMdlVersionComboBox"
+	                      Width="100"
+	                      SelectedIndex="0"
+	                      SelectionChanged="OnInspectMdlVersionChanged">
+	              <ComboBoxItem Content="Auto" />
+	              <ComboBoxItem Content="44" />
+	              <ComboBoxItem Content="45" />
+	              <ComboBoxItem Content="46" />
+	              <ComboBoxItem Content="47" />
+	              <ComboBoxItem Content="48" />
+	              <ComboBoxItem Content="49" />
+	              <ComboBoxItem Content="52" />
+	              <ComboBoxItem Content="53" />
+	              <ComboBoxItem Content="54" />
+	              <ComboBoxItem Content="55" />
+	              <ComboBoxItem Content="56" />
+	              <ComboBoxItem Content="58" />
+	              <ComboBoxItem Content="59" />
+	            </ComboBox>
+
+	            <WrapPanel Grid.Row="3" Grid.Column="1" ItemSpacing="8" LineSpacing="8">
+	              <Button Content="Inspect" Click="OnInspectClicked" />
+	              <Button Content="Open in File Manager" Click="OnExploreFromInspectClicked" />
+	            </WrapPanel>
+
+	            <TextBox Grid.Row="4"
+	                     Grid.Column="1"
+	                     x:Name="InspectOutputTextBox"
+	                     AcceptsReturn="True"
+	                     IsReadOnly="True"
+                     TextWrapping="Wrap"
+                     Height="220"
+	                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+	                     ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+	          </Grid>
+	        </StackPanel>
+	        </ScrollViewer>
+	      </TabItem>
+
+		      <TabItem x:Name="ExploreTabItem" Header="Explore">
+	        <Grid RowDefinitions="Auto,*"
+	              ColumnDefinitions="360,8,*"
+	              RowSpacing="8"
+	              ColumnSpacing="0"
+	              Margin="8">
+	          <TextBlock Grid.Row="0" Grid.ColumnSpan="3" FontSize="16" Text="Explore packages (VPK/FPX/GMA)" />
+	
+	          <ScrollViewer Grid.Row="1"
+	                        Grid.Column="0"
+	                        VerticalScrollBarVisibility="Auto"
+	                        HorizontalScrollBarVisibility="Disabled">
+	            <StackPanel Spacing="10">
+	              <StackPanel Spacing="6">
+	                <TextBlock FontSize="14" Text="Package" />
+	                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+	                  <TextBox x:Name="UnpackInputTextBox" Watermark="path/to/pak01_dir.vpk" />
+	                  <Button Grid.Column="1" Content="Browse" Click="OnBrowseUnpackInputClicked" />
+	                </Grid>
+	              </StackPanel>
+	
+	              <StackPanel Spacing="6">
+	                <TextBlock FontSize="14" Text="Output" />
+	                <TextBox x:Name="UnpackOutputTextBox" Watermark="outdir" />
+	                <WrapPanel ItemSpacing="8" LineSpacing="8">
+	                  <Button Content="Browse" Click="OnBrowseUnpackOutputClicked" />
+	                  <Button Content="Same folder" Click="OnUnpackOutputSameFolderClicked" />
+	                  <Button Content="Subfolder" Click="OnUnpackOutputSubfolderClicked" />
+	                  <Button Content="Work folder" Click="OnUnpackOutputWorkFolderClicked" />
+	                  <Button Content="Game addons" Click="OnUnpackOutputGameAddonsClicked" />
+	                </WrapPanel>
+	              </StackPanel>
+	
+	              <Expander Header="Options" IsExpanded="False">
+	                <StackPanel Spacing="6" Margin="0,6,0,0">
+	                  <WrapPanel ItemSpacing="12" LineSpacing="8">
+	                    <CheckBox x:Name="UnpackVerifyCrcCheckBox" Content="CRC32" />
+	                    <CheckBox x:Name="UnpackVerifyMd5CheckBox" Content="MD5 (VPK v2 sections)" />
+	                  </WrapPanel>
+	                  <CheckBox x:Name="UnpackFolderPerPackageCheckBox" Content="Create subfolder named after package" />
+	                  <CheckBox x:Name="UnpackKeepFullPathCheckBox" Content="Keep folder structure from package" IsChecked="True" />
+	                  <CheckBox x:Name="UnpackWriteLogFileCheckBox" Content="Write unpack.log" />
+	                  <CheckBox x:Name="UnpackOpenOutputCheckBox" Content="Open output folder when done" />
+	                  <CheckBox x:Name="UnpackShowSizesInBytesCheckBox" Content="Show sizes in bytes" Checked="OnUnpackSizeUnitsChanged" Unchecked="OnUnpackSizeUnitsChanged" />
+	                </StackPanel>
+	              </Expander>
+	
+	              <StackPanel Spacing="6">
+	                <TextBlock FontSize="14" Text="Actions" />
+	                <WrapPanel ItemSpacing="8" LineSpacing="8">
+	                  <Button Content="Extract all" Click="OnUnpackClicked" />
+	                  <Button Content="Extract selected" Click="OnUnpackExtractSelectedClicked" />
+	                </WrapPanel>
+	                <Expander Header="More actions" IsExpanded="False">
+	                  <WrapPanel ItemSpacing="8" LineSpacing="8" Margin="0,6,0,0">
+	                    <Button Content="Extract selected to temp &amp; open" Click="OnUnpackExtractSelectedToTempClicked" />
+	                    <Button Content="Extract all to temp &amp; open" Click="OnUnpackToTempClicked" />
+	                    <Button Content="Use selected in Decompile" Click="OnUnpackUseSelectedInDecompileClicked" />
+	                    <Button Content="Use selected in View" Click="OnUnpackUseSelectedInViewClicked" />
+	                  </WrapPanel>
+	                </Expander>
+	              </StackPanel>
+	            </StackPanel>
+	          </ScrollViewer>
+	
+	          <GridSplitter Grid.Row="1" Grid.Column="1" Background="Transparent" />
+	
+	          <Grid Grid.Row="1" Grid.Column="2" RowDefinitions="Auto,*,Auto" RowSpacing="8">
+	            <StackPanel Grid.Row="0" Spacing="6">
+	              <TextBox x:Name="UnpackSearchTextBox" Watermark="Search in package..." TextChanged="OnUnpackSearchTextChanged" />
+	              <WrapPanel ItemSpacing="8" LineSpacing="8">
+	                <ComboBox x:Name="UnpackSavedSearchesComboBox" Width="200" SelectionChanged="OnUnpackSavedSearchSelectionChanged" />
+	                <Button Content="Save" Click="OnUnpackSaveSearchClicked" />
+	                <Button Content="Remove" Click="OnUnpackRemoveSearchClicked" />
+	                <Button Content="List" Click="OnUnpackListClicked" />
+	                <Button Content="Clear" Click="OnUnpackClearListClicked" />
+	              </WrapPanel>
+	            </StackPanel>
+	
+	            <TabControl Grid.Row="1">
+	              <TabItem Header="Tree">
+	                <TreeView x:Name="UnpackTreeView"
+	                          SelectionChanged="OnUnpackTreeSelectionChanged"
+	                          ScrollViewer.VerticalScrollBarVisibility="Auto"
+	                          ScrollViewer.HorizontalScrollBarVisibility="Auto">
+	                  <TreeView.DataTemplates>
+	                    <TreeDataTemplate DataType="{x:Type desktop:PackageBrowserNode}"
+	                                      ItemsSource="{Binding Children}">
+	                      <TextBlock Text="{Binding Name}" />
+	                    </TreeDataTemplate>
+	                  </TreeView.DataTemplates>
+	                </TreeView>
+	              </TabItem>
+	              <TabItem Header="List">
+	                <ListBox x:Name="UnpackEntriesListBox"
+	                         SelectionMode="Multiple"
+	                         SelectionChanged="OnUnpackListSelectionChanged"
+	                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+	                         ScrollViewer.HorizontalScrollBarVisibility="Auto">
+	                  <ListBox.ItemTemplate>
+	                    <DataTemplate>
+	                      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+	                        <TextBlock Grid.Column="0" Text="{Binding RelativePath}" />
+	                        <TextBlock Grid.Column="1" Text="{Binding SizeText}" />
+	                      </Grid>
+	                    </DataTemplate>
+	                  </ListBox.ItemTemplate>
+	                </ListBox>
+	              </TabItem>
+	            </TabControl>
+	
+	            <WrapPanel Grid.Row="2" ItemSpacing="12" LineSpacing="8">
+	              <TextBlock x:Name="UnpackEntriesCountTextBlock" Text="0 entries" />
+	              <TextBlock x:Name="UnpackSelectedEntryTextBlock" />
+	            </WrapPanel>
+	          </Grid>
+	        </Grid>
+	      </TabItem>
+
+		      <TabItem x:Name="PackTabItem" Header="Pack">
+	        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+	        <StackPanel Spacing="8" Margin="8">
+	          <TextBlock FontSize="16" Text="Pack folder → VPK/FPX/GMA" />
+	          <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+            <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Input" />
+            <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+              <TextBox x:Name="PackInputTextBox" Watermark="folder" />
+              <Button Grid.Column="1" Content="Browse" Click="OnBrowsePackInputClicked" />
+            </Grid>
+
+            <TextBlock Grid.Row="1" Grid.Column="0" x:Name="PackOutputLabelTextBlock" VerticalAlignment="Center" Text="Output file" />
+            <StackPanel Grid.Row="1" Grid.Column="1" Spacing="6">
+              <TextBox x:Name="PackOutputTextBox" Watermark="path/to/pak01_dir.vpk" TextChanged="OnPackOutputTextChanged" />
+              <WrapPanel ItemSpacing="8" LineSpacing="8">
+                <Button x:Name="PackOutputBrowseButton" Content="Browse file" Click="OnBrowsePackOutputClicked" />
+                <Button x:Name="PackOutputSameFolderButton" Content="Same folder" Click="OnPackOutputSameFolderClicked" />
+                <Button x:Name="PackOutputParentButton" Content="Parent folder" Click="OnPackOutputParentFolderClicked" />
+                <Button x:Name="PackOutputWorkFolderButton" Content="Work folder" Click="OnPackOutputWorkFolderClicked" />
+              </WrapPanel>
+            </StackPanel>
+
+            <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Text="Input mode" />
+            <ComboBox Grid.Row="2" Grid.Column="1" x:Name="PackInputModeComboBox" SelectedIndex="0" Width="260" SelectionChanged="OnPackInputModeChanged">
+              <ComboBoxItem Content="Single folder" />
+              <ComboBoxItem Content="Parent of child folders (batch)" />
+            </ComboBox>
+
+            <TextBlock Grid.Row="3" Grid.Column="0" x:Name="PackBatchOutputTypeLabelTextBlock" VerticalAlignment="Center" Text="Output type" IsVisible="False" />
+            <ComboBox Grid.Row="3" Grid.Column="1" x:Name="PackBatchOutputTypeComboBox" SelectedIndex="0" Width="260" IsVisible="False" SelectionChanged="OnPackBatchOutputTypeChanged">
+              <ComboBoxItem Content="VPK (.vpk)" />
+              <ComboBoxItem Content="FPX (.fpx)" />
+              <ComboBoxItem Content="GMA (.gma)" />
+            </ComboBox>
+
+            <TextBlock Grid.Row="4" Grid.Column="0" VerticalAlignment="Center" Text="VPK options" />
+            <StackPanel Grid.Row="4" Grid.Column="1" x:Name="PackVpkOptionsPanel" Orientation="Horizontal" Spacing="12">
+              <CheckBox x:Name="PackMultiFileCheckBox" Content="Multi-file (dir + numbered archives)" />
+              <CheckBox x:Name="PackWithMd5CheckBox" Content="Write MD5 sections (VPK v2)" />
+            </StackPanel>
+
+            <TextBlock Grid.Row="5" Grid.Column="0" VerticalAlignment="Center" Text="Split (MB)" />
+            <TextBox Grid.Row="5" Grid.Column="1" x:Name="PackSplitMbTextBox" Watermark="1024" />
+
+            <TextBlock Grid.Row="6" Grid.Column="0" VerticalAlignment="Center" Text="Preload bytes" />
+            <TextBox Grid.Row="6" Grid.Column="1" x:Name="PackPreloadBytesTextBox" Watermark="0" />
+
+            <TextBlock Grid.Row="7" Grid.Column="0" VerticalAlignment="Center" Text="VPK version" />
+            <ComboBox Grid.Row="7" Grid.Column="1" x:Name="PackVpkVersionComboBox" SelectedIndex="0" Width="140">
+              <ComboBoxItem Content="1" />
+              <ComboBoxItem Content="2" />
+            </ComboBox>
+
+            <TextBlock Grid.Row="8" Grid.Column="0" VerticalAlignment="Center" Text="VPK tool (optional)" />
+            <Grid Grid.Row="8" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+              <TextBox x:Name="PackVpkToolTextBox" Watermark="path/to/vpk (optional; needed for advanced opts)" />
+              <Button Grid.Column="1" Content="Browse" Click="OnBrowsePackVpkToolClicked" />
+            </Grid>
+
+            <TextBlock Grid.Row="9" Grid.Column="0" VerticalAlignment="Center" Text="Packer opts (advanced)" />
+            <TextBox Grid.Row="9" Grid.Column="1" x:Name="PackDirectOptionsTextBox" Watermark="e.g. -v" />
+
+            <TextBlock Grid.Row="10" Grid.Column="0" VerticalAlignment="Top" Text="GMA addon.json" x:Name="PackGmaAddonJsonLabelTextBlock" IsVisible="False" />
+            <StackPanel Grid.Row="10" Grid.Column="1" x:Name="PackGmaAddonJsonPanel" IsVisible="False" Spacing="6">
+              <CheckBox x:Name="PackGmaCreateAddonJsonCheckBox" Content="Create addon.json if missing (built-in GMA packing)" />
+              <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="6">
+                <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Title" />
+                <TextBox Grid.Row="0" Grid.Column="1" x:Name="PackGmaTitleTextBox" Watermark="(optional) defaults to folder name" />
+
+                <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Text="Description" />
+                <TextBox Grid.Row="1" Grid.Column="1" x:Name="PackGmaDescriptionTextBox" Watermark="(optional)" />
+
+                <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Text="Author" />
+                <TextBox Grid.Row="2" Grid.Column="1" x:Name="PackGmaAuthorTextBox" Watermark="(optional)" />
+
+                <TextBlock Grid.Row="3" Grid.Column="0" VerticalAlignment="Center" Text="Version" />
+                <TextBox Grid.Row="3" Grid.Column="1" x:Name="PackGmaVersionTextBox" Watermark="1" />
+
+                <TextBlock Grid.Row="4" Grid.Column="0" VerticalAlignment="Center" Text="Tags" />
+                <TextBox Grid.Row="4" Grid.Column="1" x:Name="PackGmaTagsTextBox" Watermark="comma or newline separated (e.g. roleplay,fun)" AcceptsReturn="True" Height="60" />
+
+                <TextBlock Grid.Row="5" Grid.Column="0" VerticalAlignment="Top" Text="Ignore" />
+                <TextBox Grid.Row="5" Grid.Column="1" x:Name="PackGmaIgnoreTextBox" Watermark="patterns (comma or newline separated)" AcceptsReturn="True" Height="60" />
+              </Grid>
+              <CheckBox x:Name="PackGmaIgnoreWhitelistCheckBox" Content="Ignore whitelist warnings (gmad-only)" />
+            </StackPanel>
+
+            <StackPanel Grid.Row="11" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+              <Button Content="Pack" Click="OnPackClicked" />
+              <Button Content="Use in Publish" Click="OnPackUseInPublishClicked" />
+              <Button x:Name="PackSkipCurrentFolderButton" Content="Skip current folder" IsVisible="False" IsEnabled="False" Click="OnPackSkipCurrentFolderClicked" />
+            </StackPanel>
+
+	            <StackPanel Grid.Row="12" Grid.Column="1" Orientation="Horizontal" Spacing="12">
+	              <CheckBox x:Name="PackWriteLogFileCheckBox" Content="Write pack log file (.pack.log)" />
+	              <CheckBox x:Name="PackOpenOutputCheckBox" Content="Open output folder when done" />
+	            </StackPanel>
+	          </Grid>
+	        </StackPanel>
+	        </ScrollViewer>
+      </TabItem>
+
+		      <TabItem x:Name="DecompileTabItem" Header="Decompile">
+	        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+	        <StackPanel Spacing="8" Margin="8">
+	          <TextBlock FontSize="16" Text="Decompile MDL" />
+	          <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+	            <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="MDL" />
+	            <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+	              <TextBox x:Name="DecompileMdlTextBox" Watermark="path/to/model.mdl (or folder)" />
+	              <Button Grid.Column="1" Content="Browse file" Click="OnBrowseDecompileMdlClicked" />
+	              <Button Grid.Column="2" Content="Browse folder" Click="OnBrowseDecompileMdlFolderClicked" />
+	            </Grid>
+
+            <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Text="Output" />
+            <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
+              <TextBox x:Name="DecompileOutputTextBox" Watermark="outdir" />
+              <Button Grid.Column="1" Content="Browse" Click="OnBrowseDecompileOutputClicked" />
+              <Button Grid.Column="2" Content="Work folder" Click="OnDecompileOutputWorkFolderClicked" />
+              <Button Grid.Column="3" Content="Subfolder" Click="OnDecompileOutputSubfolderClicked" />
+            </Grid>
+
+	            <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Top" Text="Options" />
+	            <StackPanel Grid.Row="2" Grid.Column="1" Spacing="4">
+	              <WrapPanel ItemSpacing="12" LineSpacing="8">
+	                <TextBlock VerticalAlignment="Center" Text="Override MDL version" />
+	                <ComboBox x:Name="DecompileMdlVersionComboBox"
+	                          Width="100"
+	                          SelectedIndex="0"
+	                          SelectionChanged="OnDecompileMdlVersionChanged">
+	                  <ComboBoxItem Content="Auto" />
+	                  <ComboBoxItem Content="44" />
+	                  <ComboBoxItem Content="45" />
+	                  <ComboBoxItem Content="46" />
+	                  <ComboBoxItem Content="47" />
+	                  <ComboBoxItem Content="48" />
+	                  <ComboBoxItem Content="49" />
+	                  <ComboBoxItem Content="52" />
+	                  <ComboBoxItem Content="53" />
+	                  <ComboBoxItem Content="54" />
+	                  <ComboBoxItem Content="55" />
+	                  <ComboBoxItem Content="56" />
+	                  <ComboBoxItem Content="58" />
+	                  <ComboBoxItem Content="59" />
+	                </ComboBox>
+	              </WrapPanel>
+	              <WrapPanel ItemSpacing="12" LineSpacing="8">
+	                <CheckBox x:Name="DecompileWriteQcCheckBox" IsChecked="True" Content="Write QC" />
+	                <CheckBox x:Name="DecompileWriteRefSmdCheckBox" IsChecked="True" Content="Write ref SMDs" />
+	                <CheckBox x:Name="DecompileWriteLodSmdCheckBox" IsChecked="True" Content="Write LOD SMDs" />
+	                <CheckBox x:Name="DecompileWritePhysicsSmdCheckBox" IsChecked="True" Content="Write physics.smd" />
+	              </WrapPanel>
+		              <WrapPanel ItemSpacing="12" LineSpacing="8">
+                <CheckBox x:Name="DecompileWriteAnimsCheckBox" IsChecked="True" Content="Write anim SMDs" />
+                <CheckBox x:Name="DecompileAnimsSameFolderCheckBox" IsChecked="True" Content="Anim SMDs in same folder" />
+                <CheckBox x:Name="DecompileWriteVtaCheckBox" Content="Write VTA (flexes)" />
+              </WrapPanel>
+		              <WrapPanel ItemSpacing="12" LineSpacing="8">
+		                <CheckBox x:Name="DecompileWriteDeclareSequenceQciCheckBox" Content="Write DeclareSequence QCI (.qci)" />
+		              </WrapPanel>
+		              <WrapPanel ItemSpacing="12" LineSpacing="8">
+		                <CheckBox x:Name="DecompileWriteTextureBmpsCheckBox" IsChecked="True" Content="Write texture BMPs (GoldSrc)" />
+		              </WrapPanel>
+		              <WrapPanel ItemSpacing="12" LineSpacing="8">
+	                <CheckBox x:Name="DecompileWriteProceduralBonesVrdCheckBox" IsChecked="True" Content="Write procedural bones VRD (.vrd)" />
+	                <CheckBox x:Name="DecompileWriteDebugInfoFilesCheckBox" Content="Write debug info files" />
+	              </WrapPanel>
+	              <WrapPanel ItemSpacing="12" LineSpacing="8">
+                <CheckBox x:Name="DecompileStripMaterialPathsCheckBox" Content="Strip material paths in SMD" />
+                <CheckBox x:Name="DecompileMixedCaseQcCheckBox" IsChecked="True" Content="Mixed-case QC keywords" />
+                <CheckBox x:Name="DecompileNonValveUvCheckBox" Content="Non-Valve UV conversion" />
+              </WrapPanel>
+              <WrapPanel ItemSpacing="12" LineSpacing="8">
+                <CheckBox x:Name="DecompileQcIncludeDefineBoneLinesCheckBox" IsChecked="True" Content="QC: include $definebone" />
+                <CheckBox x:Name="DecompileQcGroupIntoQciFilesCheckBox" IsChecked="True" Content="QC: write definebones to .qci (and $include)" />
+              </WrapPanel>
+              <WrapPanel ItemSpacing="12" LineSpacing="8">
+                <CheckBox x:Name="DecompileQcSkinFamilyOnSingleLineCheckBox" IsChecked="True" Content="QC: skinfamilies single-line" />
+                <CheckBox x:Name="DecompileQcOnlyChangedMaterialsInTextureGroupLinesCheckBox" IsChecked="True" Content="QC: skinfamilies only changed materials" />
+              </WrapPanel>
+		              <WrapPanel ItemSpacing="12" LineSpacing="8">
+                <CheckBox x:Name="DecompileFlatOutputCheckBox" Content="Don't create per-model folder" />
+                <CheckBox x:Name="DecompileIncludeSubfoldersCheckBox" Content="Include subfolders (folder input)" />
+                <CheckBox x:Name="DecompilePrefixFileNamesWithModelNameCheckBox" Content="Prefix mesh file names with model name" />
+                <CheckBox x:Name="DecompileStricterFormatCheckBox" IsChecked="True" Content="Stricter formatting (compatibility)" />
+              </WrapPanel>
+	              <CheckBox x:Name="DecompileWriteLogFileCheckBox" Content="Write decompile.log" />
+	              <CheckBox x:Name="DecompileOpenOutputCheckBox" Content="Open output folder when done" />
+	            </StackPanel>
+
+	            <WrapPanel Grid.Row="3" Grid.Column="1" ItemSpacing="8" LineSpacing="8">
+	              <Button Content="Decompile" Click="OnDecompileClicked" />
+		              <Button Content="Use output QC in Compile" Click="OnDecompileUseInCompileClicked" />
+		            </WrapPanel>
+		          </Grid>
+		        </StackPanel>
+	        </ScrollViewer>
+		      </TabItem>
+
+		      <TabItem x:Name="CompileTabItem" Header="Compile">
+	        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+	        <StackPanel Spacing="8" Margin="8">
+          <TextBlock FontSize="16" Text="Compile (StudioMDL)" />
+	          <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+	            <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="QC" />
+	            <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+	              <TextBox x:Name="CompileQcTextBox" Watermark="path/to/model.qc (or folder)" />
+	              <Button Grid.Column="1" Content="Browse file" Click="OnBrowseCompileQcClicked" />
+	              <Button Grid.Column="2" Content="Browse folder" Click="OnBrowseCompileQcFolderClicked" />
+	            </Grid>
+
+            <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Text="Game Dir" />
+            <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+              <TextBox x:Name="CompileGameDirTextBox" Watermark="path/to/game" />
+              <Button Grid.Column="1" Content="Browse" Click="OnBrowseCompileGameDirClicked" />
+            </Grid>
+
+	            <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Text="StudioMDL" />
+	            <Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
+	              <TextBox x:Name="CompileStudioMdlTextBox" Watermark="(optional) path/to/studiomdl" />
+	              <Button Grid.Column="1" Content="Browse" Click="OnBrowseCompileStudioMdlClicked" />
+	              <Button Grid.Column="2" Content="Use bundled" Click="OnCompileUseBundledStudioMdlClicked" />
+	              <Button Grid.Column="3"
+	                      Width="24"
+	                      Height="24"
+	                      Padding="0"
+	                      FontSize="14"
+	                      Content="ⓘ"
+	                      ToolTip.Tip="Linux/macOS: bundled (internal) StudioMDL does not generate .phy. Use studiomdl.exe via Wine/Proton if you need collision output."
+	                      Click="OnCompileStudioMdlPhyInfoClicked" />
+	            </Grid>
+
+            <TextBlock Grid.Row="3" Grid.Column="0" VerticalAlignment="Center" Text="Steam AppID" />
+            <TextBox Grid.Row="3" Grid.Column="1" x:Name="CompileSteamAppIdTextBox" Watermark="(optional) 620" />
+
+            <TextBlock Grid.Row="4" Grid.Column="0" VerticalAlignment="Center" Text="Steam Root" />
+            <Grid Grid.Row="4" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+              <TextBox x:Name="CompileSteamRootTextBox" Watermark="(optional) /path/to/Steam" />
+              <Button Grid.Column="1" Content="Browse" Click="OnBrowseCompileSteamRootClicked" />
+            </Grid>
+
+            <TextBlock Grid.Row="5" Grid.Column="0" VerticalAlignment="Center" Text="Wine Prefix" />
+            <Grid Grid.Row="5" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+              <TextBox x:Name="CompileWinePrefixTextBox" Watermark="(optional) ~/.wine" />
+              <Button Grid.Column="1" Content="Browse" Click="OnBrowseCompileWinePrefixClicked" />
+            </Grid>
+
+            <TextBlock Grid.Row="6" Grid.Column="0" VerticalAlignment="Center" Text="Wine Cmd" />
+            <StackPanel Grid.Row="6" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+              <TextBox Width="200" x:Name="CompileWineCommandTextBox" Watermark="wine" />
+              <Button Content="Compile" Click="OnCompileClicked" />
+              <Button Content="Use in View" Click="OnCompileUseInViewClicked" />
+            </StackPanel>
+
+            <TextBlock Grid.Row="7" Grid.Column="0" VerticalAlignment="Top" Text="Options" />
+	            <StackPanel Grid.Row="7" Grid.Column="1" Spacing="4">
+	              <CheckBox x:Name="CompileIncludeSubfoldersCheckBox" Content="Include subfolders (folder input)" />
+			              <WrapPanel ItemSpacing="12" LineSpacing="8">
+			                <CheckBox x:Name="CompileNoP4CheckBox" IsChecked="True" Content="-nop4" />
+			                <CheckBox x:Name="CompileVerboseCheckBox" IsChecked="True" Content="-verbose" />
+			                <CheckBox x:Name="CompileDefineBonesCheckBox" Content="-definebones" />
+			              </WrapPanel>
+		              <WrapPanel ItemSpacing="12" LineSpacing="8">
+		                <CheckBox x:Name="CompileDefineBonesWriteQciFileCheckBox" Content="Write QCI" />
+		                <CheckBox x:Name="CompileDefineBonesOverwriteQciFileCheckBox" Content="Overwrite QCI" />
+	                <CheckBox x:Name="CompileDefineBonesModifyQcFileCheckBox" Content="Modify QC ($include)" />
+              </WrapPanel>
+	              <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+	                <TextBlock VerticalAlignment="Center" Text="DefineBones QCI" />
+	                <TextBox Grid.Column="1" x:Name="CompileDefineBonesQciFileNameTextBox" Text="DefineBones" Watermark="DefineBones.qci" />
+	              </Grid>
+	              <TextBox x:Name="CompileDirectOptionsTextBox" Watermark="Direct options (e.g. -someflag -somearg &quot;value&quot;)" />
+	              <CheckBox x:Name="CompileWriteLogFileCheckBox" Content="Write log file next to QC (.compile.log)" />
+	              <CheckBox x:Name="CompileCopyOutputCheckBox" Content="Copy compiled output to folder" />
+	              <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+	                <TextBlock VerticalAlignment="Center" Text="Output folder" />
+	                <StackPanel Grid.Column="1" Spacing="6">
+	                  <TextBox x:Name="CompileOutputCopyFolderTextBox" Watermark="outdir" />
+	                  <WrapPanel ItemSpacing="8" LineSpacing="8">
+	                    <Button Content="Browse" Click="OnBrowseCompileOutputCopyFolderClicked" />
+	                    <Button Content="Game models" Click="OnCompileOutputCopyGameModelsClicked" />
+	                    <Button Content="Work folder" Click="OnCompileOutputCopyWorkFolderClicked" />
+	                    <Button Content="Subfolder" Click="OnCompileOutputCopySubfolderClicked" />
+	                  </WrapPanel>
+	                </StackPanel>
+	              </Grid>
+	            </StackPanel>
+	          </Grid>
+	        </StackPanel>
+	        </ScrollViewer>
+      </TabItem>
+
+	      <TabItem x:Name="ViewTabItem" Header="View">
+	        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+	        <StackPanel Spacing="8" Margin="8">
+	          <TextBlock FontSize="16" Text="View (Built-in preview + HLMV)" />
+            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+            <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="MDL" />
+            <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+              <TextBox x:Name="ViewMdlTextBox" Watermark="path/to/model.mdl" TextChanged="OnViewMdlTextChanged" />
+              <Button Grid.Column="1" Content="Browse" Click="OnBrowseViewMdlClicked" />
+            </Grid>
+
+            <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Text="Game Dir" />
+            <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+              <TextBox x:Name="ViewGameDirTextBox" Watermark="(optional) path/to/game" />
+              <Button Grid.Column="1" Content="Browse" Click="OnBrowseViewGameDirClicked" />
+            </Grid>
+
+            <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Text="HLMV" />
+            <Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+              <TextBox x:Name="ViewHlmvTextBox" Watermark="(optional) path/to/hlmv.exe" />
+              <Button Grid.Column="1" Content="Browse" Click="OnBrowseViewHlmvClicked" />
+            </Grid>
+
+            <TextBlock Grid.Row="3" Grid.Column="0" VerticalAlignment="Center" Text="Steam AppID" />
+            <TextBox Grid.Row="3" Grid.Column="1" x:Name="ViewSteamAppIdTextBox" Watermark="(optional) 620" />
+
+            <TextBlock Grid.Row="4" Grid.Column="0" VerticalAlignment="Center" Text="Steam Root" />
+            <Grid Grid.Row="4" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+              <TextBox x:Name="ViewSteamRootTextBox" Watermark="(optional) /path/to/Steam" />
+              <Button Grid.Column="1" Content="Browse" Click="OnBrowseViewSteamRootClicked" />
+            </Grid>
+
+            <TextBlock Grid.Row="5" Grid.Column="0" VerticalAlignment="Center" Text="Wine" />
+            <StackPanel Grid.Row="5" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+              <TextBox Width="220" x:Name="ViewWinePrefixTextBox" Watermark="(optional) ~/.wine" />
+              <Button Content="Browse" Click="OnBrowseViewWinePrefixClicked" />
+	              <TextBox Width="160" x:Name="ViewWineCommandTextBox" Watermark="wine" />
+	              <Button Content="Open HLMV" Click="OnViewClicked" />
+	              <Button Content="View as replacement" Click="OnViewAsReplacementClicked" />
+	            </StackPanel>
+	          </Grid>
+	            <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="8">
+	              <Button Content="Load preview" Click="OnViewPreviewLoadClicked" />
+	              <Button Content="Reset view" Click="OnViewPreviewResetClicked" />
+	              <TextBlock VerticalAlignment="Center" Text="Mode" />
+	              <ComboBox x:Name="ViewPreviewModeComboBox" SelectionChanged="OnViewPreviewModeChanged" Width="120" SelectedIndex="0">
+	                <ComboBoxItem Content="Model" />
+	                <ComboBoxItem Content="Physics" />
+	              </ComboBox>
+	              <TextBlock VerticalAlignment="Center" Text="LOD" />
+	              <ComboBox x:Name="ViewPreviewLodComboBox" SelectionChanged="OnViewPreviewLodChanged" Width="80" />
+	              <TextBlock VerticalAlignment="Center" Text="Material" />
+	              <ComboBox x:Name="ViewPreviewMaterialComboBox" SelectionChanged="OnViewPreviewMaterialChanged" Width="320" />
+	              <TextBlock x:Name="ViewPreviewInfoTextBlock" VerticalAlignment="Center" />
+	            </WrapPanel>
+	            <TextBlock Text="Built-in preview: drag to rotate, scroll to zoom." />
+            <Border BorderBrush="#444" BorderThickness="1" CornerRadius="4" Height="380">
+              <desktop:ModelViewerControl x:Name="ViewPreviewControl" ClipToBounds="True" />
+            </Border>
+            <TabControl Height="220">
+              <TabItem Header="Info">
+                <TextBox x:Name="ViewPreviewSummaryTextBox"
+                         AcceptsReturn="True"
+                         IsReadOnly="True"
+                         TextWrapping="Wrap"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+              </TabItem>
+              <TabItem Header="Materials">
+                <TextBox x:Name="ViewPreviewMaterialsTextBox"
+                         AcceptsReturn="True"
+                         IsReadOnly="True"
+                         TextWrapping="Wrap"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+              </TabItem>
+              <TabItem Header="Sequences">
+                <TextBox x:Name="ViewPreviewSequencesTextBox"
+                         AcceptsReturn="True"
+                         IsReadOnly="True"
+                         TextWrapping="Wrap"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+              </TabItem>
+              <TabItem Header="Physics">
+                <TextBox x:Name="ViewPreviewPhysicsTextBox"
+                         AcceptsReturn="True"
+                         IsReadOnly="True"
+                         TextWrapping="Wrap"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+              </TabItem>
+              <TabItem Header="Data">
+                <Grid RowDefinitions="Auto,*" RowSpacing="8">
+                  <WrapPanel Orientation="Horizontal" ItemSpacing="12" LineSpacing="8">
+                    <CheckBox x:Name="ViewDataViewerAutoRunCheckBox"
+                              Content="Auto-run"
+                              IsChecked="True"
+                              Checked="OnViewDataViewerAutoRunChanged"
+                              Unchecked="OnViewDataViewerAutoRunChanged" />
+                    <Button Content="Run" Click="OnViewDataViewerRunClicked" />
+                    <TextBlock VerticalAlignment="Center" Text="Override MDL version" />
+                    <ComboBox x:Name="ViewDataViewerMdlVersionComboBox"
+                              Width="100"
+                              SelectedIndex="0"
+                              SelectionChanged="OnViewDataViewerMdlVersionChanged">
+                      <ComboBoxItem Content="Auto" />
+                      <ComboBoxItem Content="44" />
+                      <ComboBoxItem Content="45" />
+                      <ComboBoxItem Content="46" />
+                      <ComboBoxItem Content="47" />
+                      <ComboBoxItem Content="48" />
+                      <ComboBoxItem Content="49" />
+                      <ComboBoxItem Content="52" />
+                      <ComboBoxItem Content="53" />
+                      <ComboBoxItem Content="54" />
+                      <ComboBoxItem Content="55" />
+                      <ComboBoxItem Content="56" />
+                      <ComboBoxItem Content="58" />
+                      <ComboBoxItem Content="59" />
+                    </ComboBox>
+                  </WrapPanel>
+
+                  <TextBox Grid.Row="1"
+                           x:Name="ViewDataViewerOutputTextBox"
+                           AcceptsReturn="True"
+                           IsReadOnly="True"
+                           TextWrapping="Wrap"
+                           ScrollViewer.VerticalScrollBarVisibility="Auto"
+                           ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+                </Grid>
+              </TabItem>
+            </TabControl>
+	          <StackPanel Orientation="Horizontal" Spacing="8">
+	            <Button Content="Inspect" Click="OnViewUseInInspectClicked" />
+	            <Button Content="Use in Decompile" Click="OnViewUseInDecompileClicked" />
+	            <Button Content="Run game" Click="OnViewRunGameClicked" />
+	            <Button Content="Open mapping tool" Click="OnViewOpenMappingToolClicked" />
+	          </StackPanel>
+	        </StackPanel>
+	        </ScrollViewer>
+	      </TabItem>
+
+		      <TabItem x:Name="GamesTabItem" Header="Games">
+	        <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="8" Margin="8">
+	          <TextBlock Grid.Row="0" FontSize="16" Text="Set Up Games (Steam presets + overrides)" />
+	          <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+	            <TextBox x:Name="ToolchainSteamRootTextBox" Watermark="(optional) /path/to/Steam" />
+	            <Button Grid.Column="1" Content="Browse" Click="OnBrowseToolchainSteamRootClicked" />
+	            <Button Grid.Column="2" Content="List" Click="OnSteamListClicked" />
+	          </Grid>
+
+	          <Grid Grid.Row="2" ColumnDefinitions="360,8,*" ColumnSpacing="0" RowDefinitions="*">
+	            <Grid Grid.Column="0" RowDefinitions="Auto,*" RowSpacing="8" Margin="0,0,12,0">
+	              <TextBox Grid.Row="0" x:Name="ToolchainSearchTextBox" Watermark="Search games..." TextChanged="OnToolchainSearchTextChanged" />
+	              <ListBox Grid.Row="1"
+	                       x:Name="ToolchainListBox"
+	                       SelectionChanged="OnToolchainSelectionChanged"
+	                       ScrollViewer.VerticalScrollBarVisibility="Auto"
+	                       ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+	            </Grid>
+
+	            <GridSplitter Grid.Column="1" Background="Transparent" />
+
+	            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+	            <StackPanel Spacing="8">
+	              <TextBlock FontSize="14" Text="Selected game" />
+
+	              <StackPanel Spacing="10">
+	                <StackPanel Spacing="6">
+	                  <TextBlock Text="Name" />
+	                  <TextBox x:Name="ToolchainSelectedNameTextBox" IsReadOnly="True" />
+	                </StackPanel>
+
+	                <WrapPanel ItemSpacing="12" LineSpacing="8">
+	                  <StackPanel Spacing="6" Width="180">
+	                    <TextBlock Text="AppID" />
+	                    <TextBox x:Name="ToolchainSelectedAppIdTextBox" IsReadOnly="True" />
+	                  </StackPanel>
+	                  <StackPanel Spacing="6" Width="220">
+	                    <TextBlock Text="Engine" />
+	                    <ComboBox x:Name="ToolchainEngineComboBox" />
+	                  </StackPanel>
+	                </WrapPanel>
+
+	                <StackPanel Spacing="6">
+	                  <TextBlock Text="Install Dir" />
+	                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+	                    <TextBox x:Name="ToolchainSelectedInstallDirTextBox" IsReadOnly="True" />
+	                    <Button Grid.Column="1" x:Name="ToolchainInstallDirBrowseButton" Content="Browse" IsVisible="False" Click="OnBrowseToolchainInstallDirClicked" />
+	                  </Grid>
+	                </StackPanel>
+
+	                <StackPanel Spacing="6">
+	                  <TextBlock Text="Game Dir (-game)" />
+	                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+	                    <ComboBox x:Name="ToolchainGameDirComboBox" SelectionChanged="OnToolchainGameDirSelectionChanged" />
+	                    <Button Grid.Column="1" Content="Browse" Click="OnBrowseToolchainGameDirClicked" />
+	                  </Grid>
+	                </StackPanel>
+
+	                <StackPanel Spacing="6">
+	                  <TextBlock Text="StudioMDL" />
+	                  <TextBox x:Name="ToolchainStudioMdlTextBox" />
+	                  <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="8">
+	                    <Button Content="Browse" Click="OnBrowseToolchainStudioMdlClicked" />
+	                    <Button Content="Use bundled" Click="OnToolchainUseBundledStudioMdlClicked" />
+	                  </WrapPanel>
+	                </StackPanel>
+
+	                <Expander Header="Other tools" IsExpanded="False">
+	                  <StackPanel Spacing="10" Margin="0,6,0,0">
+	                    <StackPanel Spacing="6">
+	                      <TextBlock Text="HLMV" />
+	                      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+	                        <TextBox x:Name="ToolchainHlmvTextBox" />
+	                        <Button Grid.Column="1" Content="Browse" Click="OnBrowseToolchainHlmvClicked" />
+	                      </Grid>
+	                    </StackPanel>
+
+	                    <StackPanel Spacing="6">
+	                      <TextBlock Text="Hammer" />
+	                      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+	                        <TextBox x:Name="ToolchainHammerTextBox" />
+	                        <Button Grid.Column="1" Content="Browse" Click="OnBrowseToolchainHammerClicked" />
+	                      </Grid>
+	                    </StackPanel>
+
+	                    <StackPanel Spacing="6">
+	                      <TextBlock Text="Packer tool (VPK/GMAD)" />
+	                      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+	                        <TextBox x:Name="ToolchainPackerToolTextBox" />
+	                        <Button Grid.Column="1" Content="Browse" Click="OnBrowseToolchainPackerToolClicked" />
+	                      </Grid>
+	                    </StackPanel>
+
+	                    <StackPanel Spacing="6">
+	                      <TextBlock Text="VPK tool" />
+	                      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+	                        <TextBox x:Name="ToolchainVpkToolTextBox" />
+	                        <Button Grid.Column="1" Content="Browse" Click="OnBrowseToolchainVpkToolClicked" />
+	                      </Grid>
+	                    </StackPanel>
+
+	                    <StackPanel Spacing="6">
+	                      <TextBlock Text="GMAD" />
+	                      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+	                        <TextBox x:Name="ToolchainGmadTextBox" />
+	                        <Button Grid.Column="1" Content="Browse" Click="OnBrowseToolchainGmadClicked" />
+	                      </Grid>
+	                    </StackPanel>
+
+	                    <StackPanel Spacing="6">
+	                      <TextBlock Text="GoldSrc tool (studiomdl)" />
+	                      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+	                        <TextBox x:Name="ToolchainGoldSrcStudioMdlTextBox" />
+	                        <Button Grid.Column="1" Content="Browse" Click="OnBrowseToolchainGoldSrcStudioMdlClicked" />
+	                      </Grid>
+	                    </StackPanel>
+
+	                    <StackPanel Spacing="6">
+	                      <TextBlock Text="Source2 tool (studiomdl)" />
+	                      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+	                        <TextBox x:Name="ToolchainSource2StudioMdlTextBox" />
+	                        <Button Grid.Column="1" Content="Browse" Click="OnBrowseToolchainSource2StudioMdlClicked" />
+	                      </Grid>
+	                    </StackPanel>
+	                  </StackPanel>
+	                </Expander>
+	              </StackPanel>
+
+		              <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="8">
+		                <Button Content="Use for Compile" Click="OnToolchainUseForCompileClicked" />
+		                <Button Content="Use for View" Click="OnToolchainUseForViewClicked" />
+		                <Button Content="Use for Pack" Click="OnToolchainUseForPackClicked" />
+	                <Button Content="Run game" Click="OnToolchainRunGameClicked" />
+	                <Button Content="Open mapping tool" Click="OnToolchainOpenMappingToolClicked" />
+	              </WrapPanel>
+
+		              <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="8">
+		                <Button Content="Save overrides" Click="OnToolchainSaveOverridesClicked" />
+		                <Button Content="Clear overrides" Click="OnToolchainClearOverridesClicked" />
+		              </WrapPanel>
+
+	              <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="8">
+		                <Button Content="New custom preset" Click="OnToolchainNewCustomPresetClicked" />
+		                <Button Content="Clone as custom preset" Click="OnToolchainCloneAsCustomPresetClicked" />
+		                <Button x:Name="ToolchainDeleteCustomPresetButton" Content="Delete custom preset" IsEnabled="False" Click="OnToolchainDeleteCustomPresetClicked" />
+		              </WrapPanel>
+	            </StackPanel>
+	            </ScrollViewer>
+	          </Grid>
+	          <Expander Grid.Row="3" Header="Library roots and path macros" IsExpanded="False">
+	            <Border BorderThickness="1" Padding="8" CornerRadius="4" BorderBrush="#444" Margin="0,4,0,0">
+	              <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+	                <StackPanel Grid.Column="0" Spacing="6">
+	                  <TextBlock FontSize="13" Text="Extra Steam library roots" />
+	                  <TextBlock FontSize="12" Foreground="Gray" Text="Scanned in addition to Steam's libraryfolders.vdf." TextWrapping="Wrap" />
+	                  <ListBox x:Name="ToolchainLibraryRootsListBox" Height="120" SelectionChanged="OnToolchainLibraryRootSelectionChanged" />
+	                  <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="8">
+	                    <Button Content="Add folder" Click="OnToolchainLibraryRootAddClicked" />
+	                    <Button x:Name="ToolchainLibraryRootRemoveButton" Content="Remove" IsEnabled="False" Click="OnToolchainLibraryRootRemoveClicked" />
+	                  </WrapPanel>
+	                </StackPanel>
+
+	                <StackPanel Grid.Column="1" Spacing="6">
+	                  <TextBlock FontSize="13" Text="Path macros" />
+	                  <TextBlock FontSize="12" Foreground="Gray" Text="Use as $(Name) in Install/Game Dir and tool paths." TextWrapping="Wrap" />
+	                  <ListBox x:Name="ToolchainMacrosListBox" Height="120" SelectionChanged="OnToolchainMacroSelectionChanged" />
+	                  <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="6">
+	                    <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Name" />
+	                    <TextBox Grid.Row="0" Grid.Column="1" x:Name="ToolchainMacroNameTextBox" Watermark="e.g. S1" />
+
+	                    <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Text="Path" />
+	                    <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+	                      <TextBox x:Name="ToolchainMacroPathTextBox" Tag="folder" Watermark="/path/to/library or tool root" />
+	                      <Button Grid.Column="1" Content="Browse" Click="OnToolchainMacroBrowseClicked" />
+	                    </Grid>
+
+	                    <WrapPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" ItemSpacing="8" LineSpacing="8">
+	                      <Button Content="Save / Update" Click="OnToolchainMacroSaveClicked" />
+	                      <Button Content="New" Click="OnToolchainMacroNewClicked" />
+	                      <Button x:Name="ToolchainMacroDeleteButton" Content="Delete" IsEnabled="False" Click="OnToolchainMacroDeleteClicked" />
+	                    </WrapPanel>
+	                  </Grid>
+	                </StackPanel>
+	              </Grid>
+	            </Border>
+	          </Expander>
+	        </Grid>
+	      </TabItem>
+
+	      <TabItem x:Name="WorkshopTabItem" Header="Workshop">
+	        <Grid RowDefinitions="Auto,*" RowSpacing="8" Margin="8">
+	          <StackPanel Grid.Row="0" Spacing="4">
+	            <TextBlock FontSize="16" Text="Workshop" />
+	            <TextBlock FontSize="12" Foreground="Gray" Text="Download items or publish updates through Steamworks/SteamCMD." TextWrapping="Wrap" />
+	          </StackPanel>
+
+	          <TabControl Grid.Row="1" x:Name="WorkshopTabControl">
+	            <TabItem Header="Download">
+	              <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+	                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="12" Margin="4">
+	                  <Border Grid.Row="0" Grid.Column="0" BorderThickness="1" Padding="8" CornerRadius="4" BorderBrush="#444">
+	                    <StackPanel Spacing="6">
+	                      <TextBlock FontSize="13" Text="Source" />
+	                      <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="6">
+	                        <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="AppID" />
+	                        <TextBox Grid.Row="0" Grid.Column="1" x:Name="WorkshopDownloadAppIdTextBox" Watermark="4000" TextChanged="OnWorkshopDownloadPreviewTextChanged" />
+
+	                        <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Text="Steam Root" />
+	                        <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+	                          <TextBox x:Name="WorkshopDownloadSteamRootTextBox" Tag="folder" Watermark="(optional) /path/to/Steam" TextChanged="OnWorkshopDownloadPreviewTextChanged" />
+	                          <Button Grid.Column="1" Content="Browse" Click="OnBrowseWorkshopDownloadSteamRootClicked" />
+	                        </Grid>
+
+	                        <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Text="Item ID/Link" />
+	                        <TextBox Grid.Row="2" Grid.Column="1" x:Name="WorkshopDownloadIdTextBox" Watermark="https://steamcommunity.com/sharedfiles/filedetails/?id=..." TextChanged="OnWorkshopDownloadPreviewTextChanged" />
+	                      </Grid>
+	                    </StackPanel>
+	                  </Border>
+
+	                  <Border Grid.Row="0" Grid.Column="1" BorderThickness="1" Padding="8" CornerRadius="4" BorderBrush="#444">
+	                    <StackPanel Spacing="6">
+	                      <TextBlock FontSize="13" Text="Output" />
+	                      <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="6">
+	                        <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Folder" />
+	                        <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
+	                          <TextBox x:Name="WorkshopDownloadOutputTextBox" Tag="folder" Watermark="outdir" TextChanged="OnWorkshopDownloadPreviewTextChanged" />
+	                          <Button Grid.Column="1" Content="Browse" Click="OnBrowseWorkshopDownloadOutputClicked" />
+	                          <Button Grid.Column="2" Content="Documents" Click="OnWorkshopDownloadOutputDocumentsClicked" />
+	                          <Button Grid.Column="3" Content="Work folder" Click="OnWorkshopDownloadOutputWorkFolderClicked" />
+	                        </Grid>
+
+	                        <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Top" Text="Example" />
+	                        <TextBox Grid.Row="1" Grid.Column="1" x:Name="WorkshopDownloadExampleTextBox" IsReadOnly="True" TextWrapping="Wrap" />
+	                        <TextBlock Grid.Row="2" Grid.Column="1" x:Name="WorkshopDownloadExampleNoteTextBlock" FontSize="12" Foreground="Gray" TextWrapping="Wrap" />
+	                      </Grid>
+	                    </StackPanel>
+	                  </Border>
+
+	                  <Border Grid.Row="1" Grid.Column="0" BorderThickness="1" Padding="8" CornerRadius="4" BorderBrush="#444">
+	                    <StackPanel Spacing="6">
+	                      <TextBlock FontSize="13" Text="Naming &amp; Behavior" />
+	                      <WrapPanel Orientation="Horizontal" ItemSpacing="12" LineSpacing="12">
+	                        <CheckBox x:Name="WorkshopDownloadFetchDetailsCheckBox" Content="Fetch details (title/date) from Steam" IsCheckedChanged="OnWorkshopDownloadPreviewCheckChanged" />
+	                        <CheckBox x:Name="WorkshopDownloadOverwriteCheckBox" Content="Overwrite output" />
+	                      </WrapPanel>
+	                      <WrapPanel Orientation="Horizontal" ItemSpacing="12" LineSpacing="12">
+	                        <CheckBox x:Name="WorkshopDownloadIncludeTitleCheckBox" Content="Include title in name" IsCheckedChanged="OnWorkshopDownloadPreviewCheckChanged" />
+	                        <CheckBox x:Name="WorkshopDownloadIncludeIdCheckBox" IsChecked="True" Content="Include ID in name" IsCheckedChanged="OnWorkshopDownloadPreviewCheckChanged" />
+	                        <CheckBox x:Name="WorkshopDownloadAppendUpdatedCheckBox" Content="Append updated timestamp" IsCheckedChanged="OnWorkshopDownloadPreviewCheckChanged" />
+	                      </WrapPanel>
+	                      <WrapPanel Orientation="Horizontal" ItemSpacing="12" LineSpacing="12">
+	                        <CheckBox x:Name="WorkshopDownloadUnderscoresCheckBox" IsChecked="True" Content="Replace spaces with underscores" IsCheckedChanged="OnWorkshopDownloadPreviewCheckChanged" />
+	                        <CheckBox x:Name="WorkshopDownloadConvertCheckBox" IsChecked="True" Content="Convert to expected file/folder (best-effort)" IsCheckedChanged="OnWorkshopDownloadPreviewCheckChanged" />
+	                        <CheckBox x:Name="WorkshopDownloadOpenOutputCheckBox" Content="Open output when done" />
+	                      </WrapPanel>
+	                    </StackPanel>
+	                  </Border>
+
+	                  <Border Grid.Row="1" Grid.Column="1" BorderThickness="1" Padding="8" CornerRadius="4" BorderBrush="#444">
+	                    <StackPanel Spacing="6">
+	                      <TextBlock FontSize="13" Text="SteamCMD Fallback" />
+	                      <CheckBox x:Name="WorkshopDownloadSteamworksFallbackCheckBox" Content="Use Steamworks if not cached" />
+	                      <CheckBox x:Name="WorkshopDownloadSteamCmdFallbackCheckBox" Content="Use SteamCMD if not cached" />
+	                      <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="6">
+	                        <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Path" />
+	                        <TextBox Grid.Row="0" Grid.Column="1" x:Name="WorkshopDownloadSteamCmdTextBox" Tag="file" Watermark="(optional) steamcmd.exe / steamcmd" />
+	                        <Button Grid.Row="0" Grid.Column="2" x:Name="WorkshopDownloadSteamCmdBrowseButton" Content="Browse" Click="OnBrowseWorkshopDownloadSteamCmdClicked" />
+
+	                        <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Text="User" />
+	                        <TextBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" x:Name="WorkshopDownloadSteamCmdUserTextBox" Watermark="(optional) blank = anonymous" />
+
+	                        <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Text="Install dir" />
+	                        <TextBox Grid.Row="2" Grid.Column="1" x:Name="WorkshopDownloadSteamCmdInstallTextBox" Tag="folder" Watermark="(optional) temp folder by default" />
+	                        <Button Grid.Row="2" Grid.Column="2" x:Name="WorkshopDownloadSteamCmdInstallBrowseButton" Content="Browse" Click="OnBrowseWorkshopDownloadSteamCmdInstallClicked" />
+	                      </Grid>
+	                    </StackPanel>
+	                  </Border>
+
+	                  <WrapPanel Grid.Row="2" Grid.ColumnSpan="2" Orientation="Horizontal" ItemSpacing="8" LineSpacing="8">
+	                    <Button Content="Download" Click="OnWorkshopDownloadClicked" />
+	                    <Button Content="Open Workshop page" Click="OnWorkshopOpenPageClicked" />
+	                    <Button Content="Use in other tab" Click="OnWorkshopUseInOtherTabClicked" />
+	                  </WrapPanel>
+	                </Grid>
+	              </ScrollViewer>
+	            </TabItem>
+
+	            <TabItem Header="Publish">
+	              <ScrollViewer>
+	                <Grid ColumnDefinitions="320,*" ColumnSpacing="12" Margin="4">
+	                  <StackPanel Grid.Column="0" Spacing="12">
+	                    <Border BorderThickness="1" Padding="8" CornerRadius="4" BorderBrush="#444">
+	                      <StackPanel Spacing="6">
+	                        <TextBlock FontSize="13" Text="Drafts" />
+	                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+	                          <ListBox x:Name="WorkshopPublishDraftsListBox" Height="140" SelectionChanged="OnWorkshopPublishDraftSelectionChanged" />
+	                          <StackPanel Grid.Column="1" Spacing="6">
+	                            <Button Content="New" Click="OnWorkshopPublishDraftNewClicked" />
+	                            <Button Content="Save" Click="OnWorkshopPublishDraftSaveClicked" />
+	                            <Button Content="Revert" Click="OnWorkshopPublishDraftRevertClicked" />
+	                            <Button Content="Delete" Click="OnWorkshopPublishDraftDeleteClicked" />
+	                          </StackPanel>
+	                        </Grid>
+	                        <TextBlock x:Name="WorkshopPublishDraftStatusTextBlock" Text="" />
+	                      </StackPanel>
+	                    </Border>
+
+	                    <Border BorderThickness="1" Padding="8" CornerRadius="4" BorderBrush="#444">
+	                      <StackPanel Spacing="6">
+	                        <TextBlock FontSize="13" Text="Steamworks" />
+	                        <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="8">
+	                          <Button Content="Refresh my published items" Click="OnWorkshopPublishRefreshMyItemsClicked" />
+	                          <Button Content="Show quota" Click="OnWorkshopPublishQuotaClicked" />
+	                          <Button Content="Use in Download" Click="OnWorkshopPublishUseInDownloadClicked" />
+	                        </WrapPanel>
+	                        <TextBlock x:Name="WorkshopPublishQuotaTextBlock" Text="" />
+	                        <TextBox x:Name="WorkshopPublishMyItemsFilterTextBox" Watermark="Search my published items..." TextChanged="OnWorkshopPublishMyItemsFilterTextChanged" />
+	                        <ListBox x:Name="WorkshopPublishMyItemsListBox" Height="140" SelectionChanged="OnWorkshopPublishMyItemsSelectionChanged" />
+	                        <TextBlock FontSize="12" Foreground="Gray" Text="Tip: select an item to fill Published ID. Leave it blank/0 to create a new item." />
+	                      </StackPanel>
+	                    </Border>
+	                  </StackPanel>
+
+	                  <Border Grid.Column="1" BorderThickness="1" Padding="12" CornerRadius="4" BorderBrush="#444">
+	                    <StackPanel Spacing="10">
+	                      <TextBlock FontSize="14" Text="Publish" />
+	                      <TextBlock FontSize="12" Foreground="Gray" Text="Steamworks uses the Steam client; SteamCMD needs a username." TextWrapping="Wrap" />
+
+	                      <TextBlock FontSize="13" Text="Details" />
+	                      <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="6">
+	                        <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="AppID" />
+	                        <TextBox Grid.Row="0" Grid.Column="1" x:Name="WorkshopPublishAppIdTextBox" Watermark="4000" />
+
+	                        <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Text="Game" />
+	                        <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+	                          <ComboBox x:Name="WorkshopPublishGameComboBox" SelectionChanged="OnWorkshopPublishGameSelectionChanged" />
+	                          <Button Grid.Column="1" Content="Refresh" Click="OnWorkshopPublishRefreshGamesClicked" />
+	                        </Grid>
+
+	                        <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Text="SteamCMD" />
+	                        <Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+	                          <TextBox x:Name="WorkshopPublishSteamCmdTextBox" Tag="file" Watermark="(optional) steamcmd.exe / steamcmd" />
+	                          <Button Grid.Column="1" Content="Browse" Click="OnBrowseWorkshopPublishSteamCmdClicked" />
+	                        </Grid>
+
+	                        <TextBlock Grid.Row="3" Grid.Column="0" VerticalAlignment="Center" Text="SteamCMD user" />
+	                        <TextBox Grid.Row="3" Grid.Column="1" x:Name="WorkshopPublishSteamCmdUserTextBox" Watermark="(required for SteamCMD upload)" />
+
+	                        <TextBlock Grid.Row="4" Grid.Column="0" VerticalAlignment="Center" Text="Published ID" />
+	                        <TextBox Grid.Row="4" Grid.Column="1" x:Name="WorkshopPublishPublishedIdTextBox" Watermark="0 (new item) or select from list" />
+
+	                        <TextBlock Grid.Row="5" Grid.Column="0" VerticalAlignment="Center" Text="Visibility" />
+	                        <ComboBox Grid.Row="5" Grid.Column="1" x:Name="WorkshopPublishVisibilityComboBox" SelectedIndex="0">
+	                          <ComboBoxItem Content="Public" />
+	                          <ComboBoxItem Content="FriendsOnly" />
+	                          <ComboBoxItem Content="Private" />
+	                          <ComboBoxItem Content="Unlisted" />
+	                        </ComboBox>
+	                      </Grid>
+
+	                      <TextBlock FontSize="13" Text="Content" />
+	                      <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="6">
+	                        <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Content" />
+	                        <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+	                          <TextBox x:Name="WorkshopPublishContentTextBox" Tag="fileOrFolder" Watermark="folder (or .gma/.vpk file) to upload" />
+	                          <Button Grid.Column="1" Content="Browse" Click="OnBrowseWorkshopPublishContentClicked" />
+	                        </Grid>
+
+	                        <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Text="Preview" />
+	                        <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+	                          <TextBox x:Name="WorkshopPublishPreviewTextBox" Tag="file" Watermark="preview image (jpg/png)" />
+	                          <Button Grid.Column="1" Content="Browse" Click="OnBrowseWorkshopPublishPreviewClicked" />
+	                        </Grid>
+
+	                        <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Text="Title" />
+	                        <TextBox Grid.Row="2" Grid.Column="1" x:Name="WorkshopPublishTitleTextBox" />
+
+	                        <TextBlock Grid.Row="3" Grid.Column="0" VerticalAlignment="Top" Text="Description" />
+	                        <TextBox Grid.Row="3" Grid.Column="1" x:Name="WorkshopPublishDescriptionTextBox" AcceptsReturn="True" TextWrapping="Wrap" Height="90" />
+
+	                        <TextBlock Grid.Row="4" Grid.Column="0" VerticalAlignment="Top" Text="Change note" />
+	                        <TextBox Grid.Row="4" Grid.Column="1" x:Name="WorkshopPublishChangeNoteTextBox" AcceptsReturn="True" TextWrapping="Wrap" Height="70" />
+	                      </Grid>
+
+	                      <TextBlock FontSize="13" Text="Tags" />
+	                      <StackPanel Spacing="6">
+	                        <TextBox x:Name="WorkshopPublishTagsTextBox" Watermark="comma,separated,tags (optional)" />
+	                        <StackPanel x:Name="WorkshopPublishTagPresetsPanel" IsVisible="False" Spacing="6">
+	                          <TextBlock x:Name="WorkshopPublishTagPresetsLabelTextBlock" Text="Tag presets (optional)." />
+	                          <WrapPanel x:Name="WorkshopPublishTagPresetsWrapPanel" />
+	                        </StackPanel>
+	                      </StackPanel>
+
+	                      <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="6">
+	                        <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="GMod type" IsVisible="False" x:Name="WorkshopPublishGmodTypeLabelTextBlock" />
+	                        <ComboBox Grid.Row="0" Grid.Column="1" x:Name="WorkshopPublishGmodTypeComboBox" SelectedIndex="0" IsVisible="False">
+	                          <ComboBoxItem Content="ServerContent" />
+	                          <ComboBoxItem Content="gamemode" />
+	                          <ComboBoxItem Content="map" />
+	                          <ComboBoxItem Content="weapon" />
+	                          <ComboBoxItem Content="vehicle" />
+	                          <ComboBoxItem Content="npc" />
+	                          <ComboBoxItem Content="tool" />
+	                          <ComboBoxItem Content="effects" />
+	                          <ComboBoxItem Content="model" />
+	                        </ComboBox>
+
+	                        <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Top" Text="GMod tags" IsVisible="False" x:Name="WorkshopPublishGmodTagsLabelTextBlock" />
+	                        <StackPanel Grid.Row="1" Grid.Column="1" Spacing="6" IsVisible="False" x:Name="WorkshopPublishGmodTagsPanel">
+	                          <TextBlock Text="Pick up to 2 tags (Garry's Mod only)." />
+	                          <WrapPanel x:Name="WorkshopPublishGmodTagsWrapPanel">
+	                            <CheckBox Content="fun" Tag="fun" Margin="0,0,12,6" Checked="OnWorkshopPublishGmodTagToggled" Unchecked="OnWorkshopPublishGmodTagToggled" />
+	                            <CheckBox Content="roleplay" Tag="roleplay" Margin="0,0,12,6" Checked="OnWorkshopPublishGmodTagToggled" Unchecked="OnWorkshopPublishGmodTagToggled" />
+	                            <CheckBox Content="scenic" Tag="scenic" Margin="0,0,12,6" Checked="OnWorkshopPublishGmodTagToggled" Unchecked="OnWorkshopPublishGmodTagToggled" />
+	                            <CheckBox Content="movie" Tag="movie" Margin="0,0,12,6" Checked="OnWorkshopPublishGmodTagToggled" Unchecked="OnWorkshopPublishGmodTagToggled" />
+	                            <CheckBox Content="realism" Tag="realism" Margin="0,0,12,6" Checked="OnWorkshopPublishGmodTagToggled" Unchecked="OnWorkshopPublishGmodTagToggled" />
+	                            <CheckBox Content="cartoon" Tag="cartoon" Margin="0,0,12,6" Checked="OnWorkshopPublishGmodTagToggled" Unchecked="OnWorkshopPublishGmodTagToggled" />
+	                            <CheckBox Content="water" Tag="water" Margin="0,0,12,6" Checked="OnWorkshopPublishGmodTagToggled" Unchecked="OnWorkshopPublishGmodTagToggled" />
+	                            <CheckBox Content="comic" Tag="comic" Margin="0,0,12,6" Checked="OnWorkshopPublishGmodTagToggled" Unchecked="OnWorkshopPublishGmodTagToggled" />
+	                            <CheckBox Content="build" Tag="build" Margin="0,0,12,6" Checked="OnWorkshopPublishGmodTagToggled" Unchecked="OnWorkshopPublishGmodTagToggled" />
+	                          </WrapPanel>
+	                          <TextBlock x:Name="WorkshopPublishGmodTagsStatusTextBlock" Text="" />
+	                        </StackPanel>
+	                      </Grid>
+
+	                      <TextBlock FontSize="13" Text="Payload" />
+	                      <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto" ColumnSpacing="8" RowSpacing="6">
+	                        <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="VDF" />
+	                        <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+	                          <TextBox x:Name="WorkshopPublishVdfTextBox" Tag="file" Watermark="(optional) output .vdf path" />
+	                          <Button Grid.Column="1" Content="Browse" Click="OnBrowseWorkshopPublishVdfClicked" />
+	                        </Grid>
+	                      </Grid>
+
+	                      <StackPanel Spacing="6">
+	                        <CheckBox x:Name="WorkshopPublishStageCleanCheckBox" Content="Stage clean payload (exclude .git/.github/bin/obj/node_modules; recommended)" />
+	                        <CheckBox x:Name="WorkshopPublishPackVpkCheckBox" Content="Pack folder to .vpk before upload (non-GMod, experimental)" IsVisible="False" />
+	                        <StackPanel x:Name="WorkshopPublishVpkOptionsPanel" IsVisible="False" Spacing="6" Margin="24,0,0,0">
+	                          <WrapPanel Orientation="Horizontal" ItemSpacing="12" LineSpacing="12">
+	                            <TextBlock VerticalAlignment="Center" Text="VPK version" />
+	                            <ComboBox x:Name="WorkshopPublishVpkVersionComboBox" SelectedIndex="0" Width="70">
+	                              <ComboBoxItem Content="1" />
+	                              <ComboBoxItem Content="2" />
+	                            </ComboBox>
+	                            <CheckBox x:Name="WorkshopPublishVpkMd5CheckBox" Content="MD5 sections" />
+	                            <CheckBox x:Name="WorkshopPublishVpkMultiFileCheckBox" Content="Multi-file (_dir + archives)" />
+	                          </WrapPanel>
+	                        </StackPanel>
+	                        <CheckBox x:Name="WorkshopPublishOpenPageCheckBox" Content="Open Workshop page when done" />
+	                        <TextBlock Text="Payload preview" />
+	                        <TextBox x:Name="WorkshopPublishPayloadPreviewTextBox" IsReadOnly="True" TextWrapping="Wrap" />
+	                        <TextBlock x:Name="WorkshopPublishPayloadPreviewNoteTextBlock" FontSize="12" Foreground="Gray" TextWrapping="Wrap" />
+	                      </StackPanel>
+
+	                      <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="8">
+	                        <Button Content="Publish via SteamCMD" Click="OnWorkshopPublishClicked" />
+	                        <Button Content="Publish via Steamworks" Click="OnWorkshopPublishViaSteamworksClicked" />
+	                        <Button Content="Delete via Steamworks" Click="OnWorkshopPublishDeleteViaSteamworksClicked" />
+	                        <Button Content="Open Workshop page" Click="OnWorkshopPublishOpenPageClicked" />
+	                      </WrapPanel>
+	                    </StackPanel>
+	                  </Border>
+	                </Grid>
+	              </ScrollViewer>
+	            </TabItem>
+	          </TabControl>
+	        </Grid>
+	      </TabItem>
+
+	      <TabItem x:Name="OptionsTabItem" Header="Options">
+	        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+	        <StackPanel Spacing="8" Margin="8">
+	          <TextBlock FontSize="16" Text="Options" />
+	          <TextBlock FontSize="14" Text="Folders" />
+	          <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto" ColumnSpacing="8" RowSpacing="8">
+	            <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Work folder" />
+	            <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+	              <TextBox x:Name="OptionsWorkFolderTextBox" Tag="folder" Watermark="(optional) defaults to Documents/Stunstick/Work" />
+	              <Button Grid.Column="1" Content="Browse" Click="OnBrowseOptionsWorkFolderClicked" />
+	              <Button Grid.Column="2" Content="Open" Click="OnOpenOptionsWorkFolderClicked" />
+	            </Grid>
+	          </Grid>
+	          <TextBlock FontSize="14" Text="Drag-and-drop routing" />
+	          <CheckBox x:Name="OptionsGlobalDropRoutingCheckBox"
+	                    Content="Enable drop-anywhere routing"
+	                    IsChecked="True"
+	                    IsCheckedChanged="OnOptionsDropRoutingChanged" />
+	          <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+	            <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="MDL files" />
+	            <ComboBox Grid.Row="0" Grid.Column="1" x:Name="OptionsMdlDropActionComboBox" SelectionChanged="OnOptionsDropActionChanged" Width="220" SelectedIndex="0">
+	              <ComboBoxItem Content="Decompile" />
+	              <ComboBoxItem Content="View" />
+	              <ComboBoxItem Content="Inspect" />
+	            </ComboBox>
+
+	            <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Text="Packages (.vpk/.gma/.fpx)" />
+	            <ComboBox Grid.Row="1" Grid.Column="1" x:Name="OptionsPackageDropActionComboBox" SelectionChanged="OnOptionsDropActionChanged" Width="220" SelectedIndex="0">
+	              <ComboBoxItem Content="Explore (Unpack)" />
+	              <ComboBoxItem Content="Inspect" />
+	              <ComboBoxItem Content="Pack" />
+	            </ComboBox>
+
+	            <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Text="Folders" />
+	            <ComboBox Grid.Row="2" Grid.Column="1" x:Name="OptionsFolderDropActionComboBox" SelectionChanged="OnOptionsDropActionChanged" Width="220" SelectedIndex="0">
+	              <ComboBoxItem Content="Pack" />
+	              <ComboBoxItem Content="Inspect" />
+	            </ComboBox>
+
+	            <TextBlock Grid.Row="3" Grid.Column="0" VerticalAlignment="Center" Text="QC files" />
+	            <ComboBox Grid.Row="3" Grid.Column="1" x:Name="OptionsQcDropActionComboBox" SelectionChanged="OnOptionsDropActionChanged" Width="220" SelectedIndex="0">
+	              <ComboBoxItem Content="Compile" />
+	              <ComboBoxItem Content="View" />
+	              <ComboBoxItem Content="Inspect" />
+	            </ComboBox>
+	          </Grid>
+
+	          <TextBlock FontSize="14" Text="Shell integration (Windows only)" />
+	          <TextBlock FontSize="12" Foreground="Gray" TextWrapping="Wrap"
+	                     Text="Registers file associations to open in Stunstick. Context menu integration is provided through these associations." />
+	          <WrapPanel ItemSpacing="12" LineSpacing="8">
+	            <CheckBox x:Name="OptionsAssocVpkCheckBox" Content=".vpk" IsChecked="True" Checked="OnOptionsFileAssocToggled" Unchecked="OnOptionsFileAssocToggled" />
+	            <CheckBox x:Name="OptionsAssocGmaCheckBox" Content=".gma" IsChecked="True" Checked="OnOptionsFileAssocToggled" Unchecked="OnOptionsFileAssocToggled" />
+	            <CheckBox x:Name="OptionsAssocFpxCheckBox" Content=".fpx" IsChecked="True" Checked="OnOptionsFileAssocToggled" Unchecked="OnOptionsFileAssocToggled" />
+	            <CheckBox x:Name="OptionsAssocMdlCheckBox" Content=".mdl" IsChecked="True" Checked="OnOptionsFileAssocToggled" Unchecked="OnOptionsFileAssocToggled" />
+	            <CheckBox x:Name="OptionsAssocQcCheckBox" Content=".qc" IsChecked="True" Checked="OnOptionsFileAssocToggled" Unchecked="OnOptionsFileAssocToggled" />
+	          </WrapPanel>
+	          <StackPanel Orientation="Horizontal" Spacing="8">
+	            <Button Content="Register selected" Click="OnOptionsRegisterFileAssocClicked" />
+	            <Button Content="Remove selected" Click="OnOptionsRemoveFileAssocClicked" />
+	          </StackPanel>
+	        </StackPanel>
+	        </ScrollViewer>
+	      </TabItem>
+
+      <TabItem x:Name="HelpTabItem" Header="Help">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+        <StackPanel Spacing="8" Margin="8">
+          <TextBlock FontSize="16" Text="Help" />
+          <StackPanel Spacing="4">
+            <TextBlock FontSize="14" Text="Quick start" />
+            <TextBlock TextWrapping="Wrap" Text="1) Download → Explore → Decompile → Compile → View. 2) Pack → Publish for Workshop uploads. 3) Use Games tab to set tools and -game paths." />
+            <TextBlock TextWrapping="Wrap" Text="CLI: run `stunstick --help` for scriptable workflows (inspect, unpack, decompile, compile, pack, view, workshop)." />
+          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock FontSize="14" Text="Docs &amp; resources" />
+            <WrapPanel ItemSpacing="8" LineSpacing="8">
+              <Button Content="README" Click="OnHelpOpenReadmeClicked" />
+              <Button Content="Cross-platform notes" Click="OnHelpOpenCrossPlatformClicked" />
+              <Button Content="Parity tracker" Click="OnHelpOpenParityClicked" />
+              <Button Content="CLI reference" Click="OnHelpOpenCliDocsClicked" />
+            </WrapPanel>
+          </StackPanel>
+
+	          <StackPanel Spacing="4">
+	            <TextBlock FontSize="14" Text="Quick links" />
+	            <WrapPanel ItemSpacing="8" LineSpacing="8">
+	              <Button Content="Tutorial" Click="OnHelpOpenTutorialClicked" />
+              <Button Content="Contents" Click="OnHelpOpenContentsClicked" />
+              <Button Content="Index" Click="OnHelpOpenIndexClicked" />
+              <Button Content="Tips" Click="OnHelpOpenTipsClicked" />
+	              <Button Content="Crowbar guide (original)" Click="OnHelpOpenGuideClicked" />
+	            </WrapPanel>
+	          </StackPanel>
+
+	          <StackPanel Spacing="4">
+	            <TextBlock FontSize="14" Text="Support &amp; FAQ" />
+	            <WrapPanel ItemSpacing="8" LineSpacing="8">
+	              <Button Content="FAQ" Click="OnHelpOpenFaqClicked" />
+	              <Button Content="Report issue" Click="OnHelpOpenIssuesClicked" />
+	              <Button Content="Changelog" Click="OnHelpOpenChangelogClicked" />
+	              <Button Content="GitHub repo" Click="OnHelpOpenRepoClicked" />
+	            </WrapPanel>
+	          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock FontSize="14" Text="Local settings" />
+            <TextBlock Text="Settings are stored in:" />
+            <TextBox x:Name="HelpSettingsPathTextBox" IsReadOnly="True" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Content="Open settings file" Click="OnHelpOpenSettingsFileClicked" />
+              <Button Content="Open settings folder" Click="OnHelpOpenSettingsFolderClicked" />
+              <Button Content="Copy path" Click="OnHelpCopySettingsPathClicked" />
+            </StackPanel>
+          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock FontSize="14" Text="Troubleshooting" />
+            <WrapPanel ItemSpacing="8" LineSpacing="8">
+              <Button Content="Copy log" Click="OnHelpCopyLogClicked" />
+              <Button Content="Save log…" Click="OnHelpSaveLogClicked" />
+              <Button Content="Copy version info" Click="OnHelpCopyVersionInfoClicked" />
+              <Button Content="Open work folder" Click="OnHelpOpenWorkFolderClicked" />
+            </WrapPanel>
+          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock FontSize="14" Text="Shell integration (Windows only)" />
+            <TextBlock FontSize="12" Foreground="Gray" TextWrapping="Wrap" Text="Registers file associations (.vpk, .gma, .fpx, .mdl, .qc) to open in Stunstick. Affects current user only." />
+            <WrapPanel ItemSpacing="8" LineSpacing="8">
+              <Button Content="Register associations" Click="OnOptionsRegisterFileAssocClicked" />
+              <Button Content="Remove associations" Click="OnOptionsRemoveFileAssocClicked" />
+            </WrapPanel>
+          </StackPanel>
+        </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+	      <TabItem x:Name="AboutTabItem" Header="About">
+	        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+	        <StackPanel Spacing="8" Margin="8">
+	          <TextBlock FontSize="16" Text="About" />
+	          <TextBlock x:Name="AboutVersionTextBlock" Text="" />
+	          <TextBlock Text="Stunstick — .NET 8 + Avalonia UI" />
+	          <TextBlock Text="Fork by programmer1o1" />
+	          <StackPanel Orientation="Horizontal" Spacing="8">
+	            <Button Content="Open license" Click="OnAboutOpenLicenseClicked" />
+	          </StackPanel>
+	        </StackPanel>
+	        </ScrollViewer>
+	      </TabItem>
+
+	    </TabControl>
+
+    <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="12">
+      <StackPanel Spacing="4">
+        <TextBlock x:Name="OperationStatusTextBlock" Text="Ready" />
+        <ProgressBar x:Name="OperationProgressBar" Height="12" Minimum="0" Maximum="1" Value="0" />
+      </StackPanel>
+      <Button Grid.Column="1" x:Name="CancelButton" Content="Cancel" IsEnabled="False" Click="OnCancelClicked" />
+    </Grid>
+
+    <Expander Grid.Row="2" Header="Log" IsExpanded="False">
+      <TextBox x:Name="LogTextBox"
+               AcceptsReturn="True"
+               IsReadOnly="True"
+               TextWrapping="Wrap"
+               Height="140"
+               ScrollViewer.VerticalScrollBarVisibility="Auto"
+               ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+    </Expander>
+  </Grid>
+</Window>

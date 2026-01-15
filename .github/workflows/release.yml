@@ -1,0 +1,117 @@
+name: Release (experimental)
+
+on:
+  push:
+    tags:
+      - "v*"
+      - "experimental*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-pack:
+    name: Build & package (${{ matrix.rid }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: windows-latest
+            rid: win-x64
+          - os: macos-latest
+            rid: osx-x64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore Stunstick.CrossPlatform.sln
+
+      - name: Test
+        run: dotnet test Stunstick.CrossPlatform.sln -c Release --no-restore
+
+      - name: Publish (CLI + Desktop + SteamPipe)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $tag = "${{ github.ref_name }}"
+          $rid = "${{ matrix.rid }}"
+          $versionTag = $tag
+          if ($versionTag.StartsWith("v")) { $versionTag = $versionTag.Substring(1) }
+          $versionBase = $versionTag.Split("-")[0]
+          $parts = $versionBase.Split(".")
+          while ($parts.Length -lt 4) { $parts += "0" }
+          if ($parts.Length -gt 4) { $parts = $parts[0..3] }
+          $assemblyVersion = ($parts -join ".")
+          $versionArgs = @(
+            "/p:Version=$versionTag",
+            "/p:InformationalVersion=$versionTag",
+            "/p:AssemblyVersion=$assemblyVersion",
+            "/p:FileVersion=$assemblyVersion"
+          )
+
+          New-Item -ItemType Directory -Force out | Out-Null
+          New-Item -ItemType Directory -Force dist | Out-Null
+          New-Item -ItemType Directory -Force staging | Out-Null
+
+          dotnet publish src/Stunstick.Cli -c Release -r $rid --self-contained false -o out/cli @versionArgs
+          dotnet publish src/Stunstick.Desktop -c Release -r $rid --self-contained false -o out/desktop @versionArgs
+          dotnet publish src/Stunstick.SteamPipe -c Release -r $rid --self-contained false -o out/steampipe @versionArgs
+
+          # SteamPipe helper must be next to the CLI/Desktop executables for Workshop features.
+          Copy-Item -Force -Recurse out/steampipe/* out/cli/
+          Copy-Item -Force -Recurse out/steampipe/* out/desktop/
+
+          # Help resources (local fallback before opening GitHub URLs).
+          Copy-Item -Force README.md, CROSS_PLATFORM.md, parity.md, FAQ.md, LICENSE.txt out/desktop/
+
+          $root = "staging/Stunstick-$tag-$rid"
+          if (Test-Path $root) { Remove-Item -Recurse -Force $root }
+          New-Item -ItemType Directory -Force $root | Out-Null
+
+          Copy-Item -Force -Recurse out/cli $root/
+          Copy-Item -Force -Recurse out/desktop $root/
+
+          $zipPath = "dist/Stunstick-$tag-$rid.zip"
+          if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
+          Compress-Archive -Path $root -DestinationPath $zipPath
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: stunstick-${{ matrix.rid }}
+          path: dist/*.zip
+
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: build-pack
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: stunstick-*
+          merge-multiple: true
+
+      - name: Create prerelease (experimental)
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: true
+          generate_release_notes: true
+          files: dist/*.zip
