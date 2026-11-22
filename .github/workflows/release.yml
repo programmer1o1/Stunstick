@@ -102,9 +102,9 @@ jobs:
               }
               & /bin/test -x "$toolDir/studiomdl"
               if ($LASTEXITCODE -ne 0) { throw "StudioMDL is not executable in $app" }
-              & /usr/bin/lipo -verify_arch x86_64 "$toolDir/studiomdl"
+              & /usr/bin/lipo "$toolDir/studiomdl" -verify_arch x86_64
               if ($LASTEXITCODE -ne 0) { throw "Invalid StudioMDL architecture in $app" }
-              & /usr/bin/lipo -verify_arch x86_64 "$toolDir/libvphysics.dylib"
+              & /usr/bin/lipo "$toolDir/libvphysics.dylib" -verify_arch x86_64
               if ($LASTEXITCODE -ne 0) { throw "Invalid vphysics architecture in $app" }
             }
             & /usr/bin/ditto -c -k --keepParent $root $zipPath
