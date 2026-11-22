@@ -246,19 +246,33 @@ public sealed partial class MainWindow : Window
 	private sealed class WorkshopPublishedItemListItem
 	{
 		public WorkshopPublishedItem Item { get; }
+		public string TitleWithId { get; }
+		public string Details { get; }
+		public bool HasDetails => Details.Length > 0;
 
 		public WorkshopPublishedItemListItem(WorkshopPublishedItem item)
 		{
-			Item = item ?? throw new ArgumentNullException(nameof(item));
+			Item = item;
+			var title = string.IsNullOrWhiteSpace(item.Title) ? "(untitled)" : item.Title.Trim();
+			TitleWithId = $"{item.PublishedFileId}: {title}";
+			var owner = string.IsNullOrWhiteSpace(item.OwnerName) ? item.OwnerSteamId?.ToString() : item.OwnerName;
+			Details = string.Join(" · ", new[]
+			{
+				item.CreatedAtUtc is { } posted ? $"Posted {posted:yyyy-MM-dd}" : null,
+				item.UpdatedAtUtc is { } updated ? $"Updated {updated:yyyy-MM-dd}" : null,
+				item.Visibility == WorkshopPublishVisibility.FriendsOnly ? "Friends only" : item.Visibility?.ToString(),
+				owner is null ? null : $"Owner {owner}"
+			}.OfType<string>());
 		}
+	}
 
-		public override string ToString()
-		{
-			var title = string.IsNullOrWhiteSpace(Item.Title) ? "(untitled)" : Item.Title.Trim();
-			var updated = Item.UpdatedAtUtc.HasValue ? Item.UpdatedAtUtc.Value.ToString("yyyy-MM-dd") : string.Empty;
-			var updatedText = string.IsNullOrWhiteSpace(updated) ? string.Empty : $" ({updated})";
-			return $"{Item.PublishedFileId}: {title}{updatedText}";
-		}
+	private enum WorkshopPublishSearchField
+	{
+		All,
+		Id,
+		Title,
+		Description,
+		Owner
 	}
 
 	private sealed class ViewPreviewMaterialListItem
@@ -293,7 +307,10 @@ public sealed partial class MainWindow : Window
 			EnablePathDragDrop();
 			EnableGlobalDropRouting();
 			LoadSettings();
+			InitializeSingleInstanceOption();
 			InitializeWorkshopDownloadUi();
+			GetRequiredControl<ComboBox>("WorkshopPublishMyItemsFilterFieldComboBox").SelectionChanged += OnWorkshopPublishMyItemsFilterChanged;
+			GetRequiredControl<TextBox>("WorkshopPublishMyItemsFilterTextBox").TextChanged += OnWorkshopPublishMyItemsFilterChanged;
 			UpdatePackUiForMode(convertOutput: false);
 			EnableWorkshopPublishDraftTracking();
 			HandleStartupArgs(Environment.GetCommandLineArgs().Skip(1).ToArray());
@@ -1745,19 +1762,12 @@ public sealed partial class MainWindow : Window
 					WorkshopPublishSelectedDraftId = workshopPublishSelectedDraftId
 				};
 
-			var settingsPath = GetSettingsPath();
-			var settingsDir = Path.GetDirectoryName(settingsPath);
-			if (!string.IsNullOrWhiteSpace(settingsDir))
-			{
-				Directory.CreateDirectory(settingsDir);
-			}
-
 			var json = System.Text.Json.JsonSerializer.Serialize(settings, new System.Text.Json.JsonSerializerOptions
 			{
 				WriteIndented = true,
 				TypeInfoResolver = new System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver()
 			});
-			File.WriteAllText(settingsPath, json);
+			DesktopSettings.WriteSettings(json);
 		}
 		catch
 		{
@@ -1765,10 +1775,29 @@ public sealed partial class MainWindow : Window
 		}
 	}
 
-	private static string GetSettingsPath()
+	private static string GetSettingsPath() => DesktopSettings.SettingsPath;
+
+	private void InitializeSingleInstanceOption()
 	{
-		var baseDir = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-		return Path.Combine(baseDir, "Stunstick", "desktop-settings.json");
+		var option = GetRequiredControl<CheckBox>("OptionsSingleInstanceCheckBox");
+		option.IsChecked = DesktopSettings.ReadSingleInstanceEnabled();
+		option.IsCheckedChanged += OnOptionsSingleInstanceChanged;
+	}
+
+	private void OnOptionsSingleInstanceChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+	{
+		var option = GetRequiredControl<CheckBox>("OptionsSingleInstanceCheckBox");
+		try
+		{
+			DesktopSettings.WriteSingleInstanceEnabled(option.IsChecked == true);
+		}
+		catch (Exception ex)
+		{
+			option.IsCheckedChanged -= OnOptionsSingleInstanceChanged;
+			option.IsChecked = DesktopSettings.ReadSingleInstanceEnabled();
+			option.IsCheckedChanged += OnOptionsSingleInstanceChanged;
+			AppendLog($"Failed to save single-instance preference: {ex.Message}");
+		}
 	}
 
 	private static string GetDefaultStunstickDocumentsFolder()
@@ -3761,12 +3790,13 @@ public sealed partial class MainWindow : Window
 				return;
 			}
 
+			var field = (WorkshopPublishSearchField)GetComboBoxIndex("WorkshopPublishMyItemsFilterFieldComboBox");
 			list.ItemsSource = workshopPublishMyItems
-				.Where(item => WorkshopPublishedItemMatchesFilter(item.Item, query))
+				.Where(item => WorkshopPublishedItemMatchesFilter(item.Item, query, field))
 				.ToArray();
 		}
 
-		private void OnWorkshopPublishMyItemsFilterTextChanged(object? sender, TextChangedEventArgs e)
+		private void OnWorkshopPublishMyItemsFilterChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
 		{
 			try
 			{
@@ -3778,32 +3808,20 @@ public sealed partial class MainWindow : Window
 			}
 		}
 
-		private static bool WorkshopPublishedItemMatchesFilter(WorkshopPublishedItem item, string query)
+		private static bool WorkshopPublishedItemMatchesFilter(
+			WorkshopPublishedItem item, string query, WorkshopPublishSearchField field)
 		{
-			if (item.PublishedFileId.ToString().Contains(query, StringComparison.OrdinalIgnoreCase))
+			bool Contains(string? value) => value?.Contains(query, StringComparison.OrdinalIgnoreCase) == true;
+			bool MatchesOwner() => Contains(item.OwnerName) || Contains(item.OwnerSteamId?.ToString());
+			return field switch
 			{
-				return true;
-			}
-
-			if (!string.IsNullOrWhiteSpace(item.Title) && item.Title.Contains(query, StringComparison.OrdinalIgnoreCase))
-			{
-				return true;
-			}
-
-			if (!string.IsNullOrWhiteSpace(item.Description) && item.Description.Contains(query, StringComparison.OrdinalIgnoreCase))
-			{
-				return true;
-			}
-
-			foreach (var tag in item.Tags)
-			{
-				if (tag.Contains(query, StringComparison.OrdinalIgnoreCase))
-				{
-					return true;
-				}
-			}
-
-			return false;
+				WorkshopPublishSearchField.Id => Contains(item.PublishedFileId.ToString()),
+				WorkshopPublishSearchField.Title => Contains(item.Title),
+				WorkshopPublishSearchField.Description => Contains(item.Description),
+				WorkshopPublishSearchField.Owner => MatchesOwner(),
+				_ => Contains(item.PublishedFileId.ToString()) || Contains(item.Title) ||
+					Contains(item.Description) || MatchesOwner() || item.Tags.Any(Contains)
+			};
 		}
 
 		private void OnWorkshopPublishUseInDownloadClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

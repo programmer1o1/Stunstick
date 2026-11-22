@@ -3,9 +3,14 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
     <AssemblyName>Stunstick</AssemblyName>
+    <ApplicationIcon>Assets/stunstick.ico</ApplicationIcon>
     <Product>Stunstick</Product>
     <UsedAvaloniaProducts></UsedAvaloniaProducts>
   </PropertyGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets/stunstick.png" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\\Stunstick.App\\Stunstick.App.csproj" />

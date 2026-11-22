@@ -1363,6 +1363,7 @@ static class Program
 				return WriteError($"SteamUGC query failed: {completed.m_eResult}");
 			}
 
+			var currentUserName = SteamFriends.GetPersonaName();
 			var items = new List<object>();
 			for (uint index = 0; index < completed.m_unNumResultsReturned; index++)
 			{
@@ -1376,6 +1377,8 @@ static class Program
 					publishedFileId = (ulong)details.m_nPublishedFileId.m_PublishedFileId,
 					title = details.m_rgchTitle,
 					description = details.m_rgchDescription,
+					ownerSteamId = details.m_ulSteamIDOwner,
+					ownerName = details.m_ulSteamIDOwner == (ulong)steamId ? currentUserName : null,
 					createdAt = details.m_rtimeCreated,
 					updatedAt = details.m_rtimeUpdated,
 					visibility = details.m_eVisibility switch

@@ -1,5 +1,7 @@
 using System.Numerics;
 using System.Text;
+using System.Globalization;
+using Stunstick.Core.Steam;
 
 namespace Stunstick.Core.Phy;
 
@@ -114,8 +116,104 @@ public static class PhyReader
 		return new PhyFile(
 			SourcePath: sourcePath,
 			Header: header,
-			Solids: solids);
+			Solids: solids)
+		{
+			Collision = ReadCollisionMetadata(stream, reader)
+		};
 	}
+
+	private static PhyCollisionMetadata? ReadCollisionMetadata(Stream stream, BinaryReader reader)
+	{
+		var remaining = stream.Length - stream.Position;
+		if (remaining <= 0 || remaining > 8 * 1024 * 1024)
+		{
+			return null;
+		}
+
+		var text = Encoding.ASCII.GetString(reader.ReadBytes((int)remaining));
+		var terminator = text.IndexOf('\0');
+		if (terminator >= 0)
+		{
+			text = text[..terminator];
+		}
+
+		VdfObject root;
+		try
+		{
+			root = VdfParser.ParseWithRepeatedKeys(text);
+		}
+		catch (InvalidDataException)
+		{
+			return null;
+		}
+
+		root.TryGetObject("editparams", out var edit);
+		var solids = new List<PhyCollisionSolidMetadata>();
+		var limits = new List<PhyJointLimit>();
+		var pairs = new List<(int First, int Second)>();
+		bool? selfCollisions = null;
+		foreach (var (name, value) in root.OrderedEntries!)
+		{
+			if (value is not VdfObject block)
+			{
+				continue;
+			}
+
+			switch (name)
+			{
+				case "solid" when ReadIndex(block, "index") is int index:
+					solids.Add(new PhyCollisionSolidMetadata(index, ReadString(block, "name") ?? string.Empty,
+						ReadNumber(block, "mass"), ReadNumber(block, "massbias"), ReadNumber(block, "inertia"),
+						ReadNumber(block, "damping"), ReadNumber(block, "rotdamping")));
+					break;
+				case "ragdollconstraint" when ReadIndex(block, "child") is int child:
+					foreach (var axis in "xyz")
+					{
+						if (ReadNumber(block, axis + "min") is double min &&
+							ReadNumber(block, axis + "max") is double max)
+						{
+							limits.Add(new PhyJointLimit(child, axis, min, max, ReadNumber(block, axis + "friction") ?? 0));
+						}
+					}
+					break;
+				case "collisionrules":
+					var selfCollisionValue = ReadString(block, "selfcollisions");
+					selfCollisions = selfCollisionValue switch { "0" => false, "1" => true, _ => selfCollisions };
+					foreach (var entry in block.OrderedEntries!)
+					{
+						if (entry.Key == "collisionpair" && entry.Value is VdfString pair)
+						{
+							var indexes = pair.Value.Split(',');
+							if (indexes.Length == 2 &&
+								int.TryParse(indexes[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var first) &&
+								int.TryParse(indexes[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var second))
+							{
+								pairs.Add((first, second));
+							}
+						}
+					}
+					break;
+			}
+		}
+
+		return edit is null && solids.Count == 0 && limits.Count == 0
+			? null
+			: new PhyCollisionMetadata(ReadNumber(edit, "totalmass"), ReadString(edit, "rootname"),
+				ReadString(edit, "concave") == "1", solids, limits, selfCollisions, pairs);
+	}
+
+	private static int? ReadIndex(VdfObject block, string key) =>
+		int.TryParse(ReadString(block, key), NumberStyles.Integer, CultureInfo.InvariantCulture, out var index) && index >= 0
+			? index
+			: null;
+
+	private static double? ReadNumber(VdfObject? block, string key) =>
+		double.TryParse(ReadString(block, key), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && double.IsFinite(value)
+			? value
+			: null;
+
+	private static string? ReadString(VdfObject? block, string key) =>
+		block is not null && block.TryGetString(key, out var value) ? value : null;
 
 	private static PhySolid? ReadSolid(Stream stream, BinaryReader reader, int solidSize, long solidEnd)
 	{
@@ -161,6 +259,17 @@ public static class PhyReader
 			stream.Seek(foundOffset + 4, SeekOrigin.Begin);
 		}
 
+		var ledgeStart = stream.Position;
+		if (signature == "VPHY" && ledgeStart == phyDataStart + 76)
+		{
+			var packedSolid = ReadInlineVertexSolid(reader, solidSize, solidEnd, ledgeStart);
+			if (packedSolid is not null)
+			{
+				return packedSolid;
+			}
+			stream.Position = ledgeStart;
+		}
+
 		// Port of Crowbar's SourcePhyFile.ReadSourceCollisionData for the data we need (convex meshes + vertices).
 		// Important: Crowbar drives the face-section loop using vertexDataStreamPosition, which comes from vertexDataOffset.
 		var convexMeshes = new List<PhyConvexMesh>();
@@ -201,22 +310,11 @@ public static class PhyReader
 			var faces = new List<PhyFace>(capacity: triangleCount);
 			for (var i = 0; i < triangleCount; i++)
 			{
-				_ = reader.ReadByte();   // triangleIndex
-				_ = reader.ReadByte();
-				_ = reader.ReadUInt16();
-
-				var i0 = reader.ReadUInt16();
-				_ = reader.ReadUInt16();
-				var i1 = reader.ReadUInt16();
-				_ = reader.ReadUInt16();
-				var i2 = reader.ReadUInt16();
-				_ = reader.ReadUInt16();
-
-				faces.Add(new PhyFace(i0, i1, i2));
-
-				AddUnique(usedVertexIndexes, i0);
-				AddUnique(usedVertexIndexes, i1);
-				AddUnique(usedVertexIndexes, i2);
+				var face = ReadFace(reader);
+				faces.Add(face);
+				AddUnique(usedVertexIndexes, face.VertexIndex0);
+				AddUnique(usedVertexIndexes, face.VertexIndex1);
+				AddUnique(usedVertexIndexes, face.VertexIndex2);
 			}
 
 			convexMeshes.Add(new PhyConvexMesh(
@@ -254,17 +352,86 @@ public static class PhyReader
 		var vertices = new List<Vector3>(capacity: vertexCount);
 		for (var i = 0; i < vertexCount; i++)
 		{
-			var x = reader.ReadSingle();
-			var y = reader.ReadSingle();
-			var z = reader.ReadSingle();
-			_ = reader.ReadSingle(); // w
-			vertices.Add(new Vector3(x, y, z));
+			vertices.Add(ReadVertex(reader));
 		}
 
 		return new PhySolid(
 			Size: solidSize,
 			Vertices: vertices,
 			ConvexMeshes: convexMeshes);
+	}
+
+	private static PhySolid? ReadInlineVertexSolid(BinaryReader reader, int solidSize, long solidEnd, long ledgeStart)
+	{
+		const int surfaceSize = 48;
+		const int elementSize = 16;
+		const int treeNodeSize = 28;
+		var stream = reader.BaseStream;
+		var surfaceStart = ledgeStart - surfaceSize;
+		stream.Position = surfaceStart + 32;
+		var treeStart = surfaceStart + reader.ReadInt32();
+		if (treeStart <= ledgeStart || treeStart + treeNodeSize > solidEnd)
+		{
+			return null;
+		}
+
+		// Portable MDLForge writes each convex's points directly after its faces.
+		// Valve-style shared point buffers continue through the legacy reader.
+		var meshes = new List<PhyConvexMesh>();
+		var vertices = new List<Vector3>();
+		stream.Position = ledgeStart;
+		while (stream.Position < treeStart)
+		{
+			if (stream.Position + elementSize > treeStart)
+			{
+				return null;
+			}
+			var start = stream.Position;
+			var pointOffset = reader.ReadInt32();
+			var boneIndex = reader.ReadInt32() - 1;
+			var flags = reader.ReadInt32();
+			var triangleCount = reader.ReadUInt16();
+			_ = reader.ReadUInt16();
+			var ledgeSize = (int)((uint)flags >> 8) * elementSize;
+			var pointCount = (ledgeSize - pointOffset) / elementSize;
+			if ((flags & 7) != 4 || pointOffset != (triangleCount + 1) * elementSize ||
+				pointCount <= 0 || start + ledgeSize > treeStart || vertices.Count + pointCount > ushort.MaxValue + 1)
+			{
+				return null;
+			}
+
+			var faces = new List<PhyFace>(triangleCount);
+			for (var i = 0; i < triangleCount; i++)
+			{
+				var face = ReadFace(reader);
+				if (face.VertexIndex0 >= pointCount || face.VertexIndex1 >= pointCount || face.VertexIndex2 >= pointCount)
+				{
+					return null;
+				}
+				faces.Add(new PhyFace((ushort)(vertices.Count + face.VertexIndex0),
+					(ushort)(vertices.Count + face.VertexIndex1), (ushort)(vertices.Count + face.VertexIndex2)));
+			}
+			for (var i = 0; i < pointCount; i++)
+			{
+				vertices.Add(ReadVertex(reader));
+			}
+			meshes.Add(new PhyConvexMesh(boneIndex, flags, faces));
+		}
+
+		return new PhySolid(solidSize, vertices, meshes);
+	}
+
+	private static PhyFace ReadFace(BinaryReader reader)
+	{
+		_ = reader.ReadUInt32();
+		return new PhyFace((ushort)reader.ReadUInt32(), (ushort)reader.ReadUInt32(), (ushort)reader.ReadUInt32());
+	}
+
+	private static Vector3 ReadVertex(BinaryReader reader)
+	{
+		var point = new Vector3(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
+		_ = reader.ReadSingle(); // Padding.
+		return point;
 	}
 
 	private static void AddUnique(List<ushort> list, ushort value)

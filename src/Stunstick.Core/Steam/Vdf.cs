@@ -8,6 +8,8 @@ public sealed record VdfString(string Value) : VdfValue;
 
 public sealed record VdfObject(IReadOnlyDictionary<string, VdfValue> Properties) : VdfValue
 {
+	internal IReadOnlyList<KeyValuePair<string, VdfValue>>? OrderedEntries { get; init; }
+
 	public bool TryGetString(string key, [NotNullWhen(true)] out string? value)
 	{
 		value = null;

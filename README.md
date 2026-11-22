@@ -1,33 +1,46 @@
-# Stunstick
+# ![Stunstick](docs/images/stunstick-title.png)
 
-Stunstick is a cross-platform fork of Crowbar (GoldSource and Source Engine modding tool).
+Stunstick is a cross-platform fork of Crowbar for working with GoldSource and Source game assets. It provides an Avalonia desktop app and a scriptable CLI for Windows, macOS, and Linux.
 
-**Status: Experimental.** Stunstick is very early and may be missing features or change behavior.
-Expect bugs, breaking changes, and incomplete parity. GitHub releases are prereleases intended for testing.
+**Experimental.** Releases are prereleases. Model and toolchain support varies by game and format.
 
-This repo contains:
+![Stunstick on macOS showing a Source wood pallet in the built-in model viewer](docs/images/stunstick-view.jpg)
 
-- **Stunstick (cross-platform, .NET 8):** `Stunstick.CrossPlatform.sln` (CLI + Avalonia Desktop UI under `src/`)
-- **Original Crowbar (Windows-only, unchanged):** `Crowbar.sln` (VB.NET WinForms on .NET Framework 4)
+*Stunstick’s View tab showing Valve’s Source wood pallet model and its LOD 0 triangle count.*
 
-## Links
+## What you can do
 
-- Original Crowbar website: https://steamcommunity.com/groups/CrowbarTool
-  - When linking to Crowbar, prefer this page since it aggregates the official info and downloads.
+| Workflow | Desktop tabs |
+| --- | --- |
+| Inspect models and browse or extract VPK, FPX, and GMA archives | **Inspect**, **Explore** |
+| Decompile supported models to QC, SMD, VTA, and other source files | **Decompile** |
+| Compile QC files with StudioMDL and preview the result | **Compile**, **View** |
+| Pack archives or manage supported Steam Workshop items | **Pack**, **Workshop** |
 
-## Building
+## Get started
 
-### Stunstick (cross-platform)
+1. Download the ZIP for your platform from [GitHub Releases](https://github.com/programmer1o1/Stunstick/releases) and install the .NET 8 runtime.
+2. Extract the entire ZIP. Run **Stunstick** from the `desktop` folder or use `stunstick` from the `cli` folder.
+3. To rebuild a model, open it in **Decompile** and choose an output folder. Select **Use output QC in Compile** after decompilation. Set your game directory and StudioMDL in **Games** or **Compile**, then compile the QC.
 
-Prereq: install .NET 8 SDK.
+Keep any companion files next to the input MDL. A Source model may use `.vvd`, `.vtx`, `.phy`, or `.ani` companions.
 
-- Build: `dotnet build Stunstick.CrossPlatform.sln`
-- Run CLI: `dotnet run --project src/Stunstick.Cli -- --help`
-- Run Desktop: `dotnet run --project src/Stunstick.Desktop`
+## Build from source
 
-### Original Crowbar (Windows-only)
+With the .NET 8 SDK installed, run these commands from the repository root.
 
-I currently build via Visual Basic in Visual Studio Community 2017.
-I use Debug x86 when debugging and Release x86 when releasing to public.
+```sh
+dotnet build Stunstick.CrossPlatform.sln
+dotnet test Stunstick.CrossPlatform.sln
+dotnet run --project src/Stunstick.Desktop
+dotnet run --project src/Stunstick.Cli -- --help
+```
 
-I tested building in Visual Studio Community 2019 on 15-Apr-2021. All I had to change were the settings from Debug Any CPU and Release Any CPU to Debug x86 and Release x86 at the top in the default toolbars.
+## Documentation
+
+- [Platform setup and CLI examples](CROSS_PLATFORM.md)
+- [FAQ and bug reports](FAQ.md)
+- [Crowbar parity and verification coverage](parity.md)
+- [Build the bundled StudioMDL](tools/studiomdl/README.md)
+
+Stunstick builds on [Crowbar](https://steamcommunity.com/groups/CrowbarTool). The repository also contains the original Windows application in `Crowbar.sln`. See the [license](LICENSE.txt).

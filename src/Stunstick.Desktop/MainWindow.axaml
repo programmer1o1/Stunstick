@@ -3,6 +3,7 @@
         xmlns:desktop="clr-namespace:Stunstick.Desktop"
         x:Class="Stunstick.Desktop.MainWindow"
         Title="Stunstick"
+        Icon="avares://Stunstick/Assets/stunstick.png"
         Width="1200"
         Height="700"
         MinWidth="900"
@@ -413,7 +414,7 @@
 	                      Padding="0"
 	                      FontSize="14"
 	                      Content="ⓘ"
-	                      ToolTip.Tip="Linux/macOS: bundled (internal) StudioMDL does not generate .phy. Use studiomdl.exe via Wine/Proton if you need collision output."
+	                      ToolTip.Tip="On macOS, the bundled compiler can generate .phy with its companion physics library. Toolchain support varies by platform and game."
 	                      Click="OnCompileStudioMdlPhyInfoClicked" />
 	            </Grid>
 
@@ -936,8 +937,31 @@
 	                          <Button Content="Use in Download" Click="OnWorkshopPublishUseInDownloadClicked" />
 	                        </WrapPanel>
 	                        <TextBlock x:Name="WorkshopPublishQuotaTextBlock" Text="" />
-	                        <TextBox x:Name="WorkshopPublishMyItemsFilterTextBox" Watermark="Search my published items..." TextChanged="OnWorkshopPublishMyItemsFilterTextChanged" />
-	                        <ListBox x:Name="WorkshopPublishMyItemsListBox" Height="140" SelectionChanged="OnWorkshopPublishMyItemsSelectionChanged" />
+	                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+	                          <ComboBox x:Name="WorkshopPublishMyItemsFilterFieldComboBox"
+	                                    AutomationProperties.Name="Search field" SelectedIndex="0">
+	                            <ComboBoxItem Content="All fields" />
+	                            <ComboBoxItem Content="ID" />
+	                            <ComboBoxItem Content="Title" />
+	                            <ComboBoxItem Content="Description" />
+	                            <ComboBoxItem Content="Owner" />
+	                          </ComboBox>
+	                          <TextBox Grid.Column="1" x:Name="WorkshopPublishMyItemsFilterTextBox"
+	                                   Watermark="Search my published items..." />
+	                        </Grid>
+	                        <ListBox x:Name="WorkshopPublishMyItemsListBox" Height="140"
+	                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+	                                 SelectionChanged="OnWorkshopPublishMyItemsSelectionChanged">
+	                          <ListBox.ItemTemplate>
+	                            <DataTemplate>
+	                              <StackPanel Spacing="2">
+	                                <TextBlock Text="{Binding TitleWithId}" TextWrapping="Wrap" />
+	                                <TextBlock Text="{Binding Details}" IsVisible="{Binding HasDetails}"
+	                                           FontSize="12" Opacity="0.75" TextWrapping="Wrap" />
+	                              </StackPanel>
+	                            </DataTemplate>
+	                          </ListBox.ItemTemplate>
+	                        </ListBox>
 	                        <TextBlock FontSize="12" Foreground="Gray" Text="Tip: select an item to fill Published ID. Leave it blank/0 to create a new item." />
 	                      </StackPanel>
 	                    </Border>
@@ -1093,6 +1117,8 @@
 	        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
 	        <StackPanel Spacing="8" Margin="8">
 	          <TextBlock FontSize="16" Text="Options" />
+	          <CheckBox x:Name="OptionsSingleInstanceCheckBox"
+	                    Content="Single instance (applies on launch)" />
 	          <TextBlock FontSize="14" Text="Folders" />
 	          <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto" ColumnSpacing="8" RowSpacing="8">
 	            <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Work folder" />
@@ -1231,7 +1257,10 @@
 	      <TabItem x:Name="AboutTabItem" Header="About">
 	        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
 	        <StackPanel Spacing="8" Margin="8">
-	          <TextBlock FontSize="16" Text="About" />
+	          <StackPanel Orientation="Horizontal" Spacing="10">
+	            <Image Source="avares://Stunstick/Assets/stunstick.png" Width="32" Height="32" />
+	            <TextBlock FontSize="16" VerticalAlignment="Center" Text="Stunstick" />
+	          </StackPanel>
 	          <TextBlock x:Name="AboutVersionTextBlock" Text="" />
 	          <TextBlock Text="Stunstick — .NET 8 + Avalonia UI" />
 	          <TextBlock Text="Fork by programmer1o1" />

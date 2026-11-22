@@ -17,6 +17,11 @@ fi
 
 build_type="${CMAKE_BUILD_TYPE:-Release}"
 build_i686="${STUDIOMDL_BUILD_I686:-OFF}"
+physics_module="${STUDIOMDL_VPHYSICS_DYLIB:-}"
+if [[ -n "$physics_module" && ( "$(uname -s)" != "Darwin" || ! -f "$physics_module" ) ]]; then
+  echo "STUDIOMDL_VPHYSICS_DYLIB must point to a compatible macOS libvphysics.dylib." >&2
+  exit 1
+fi
 
 export CCACHE_DISABLE="${CCACHE_DISABLE:-1}"
 
@@ -44,12 +49,18 @@ cleanup() {
 }
 trap cleanup EXIT
 
-cmake -S "$mdlforge_root" -B "$build_dir" \
-  -DCMAKE_BUILD_TYPE="$build_type" \
-  -DSTUDIOMDL_REQUIRE_32BIT=OFF
+configure_args=(-DCMAKE_BUILD_TYPE="$build_type" -DSTUDIOMDL_REQUIRE_32BIT=OFF)
+if [[ "$(uname -s)" == "Darwin" && "$(uname -m)" == "arm64" ]]; then
+  configure_args+=(-DCMAKE_OSX_ARCHITECTURES=x86_64)
+fi
+
+cmake -S "$mdlforge_root" -B "$build_dir" "${configure_args[@]}"
 
 cmake --build "$build_dir" --parallel --config "$build_type"
 cmake --install "$build_dir" --prefix "$install_prefix" --config "$build_type"
+if [[ -n "$physics_module" ]]; then
+  install -m 755 "$physics_module" "$install_prefix/bin/libvphysics.dylib"
+fi
 
 if [[ "$build_i686" == "1" || "$build_i686" == "ON" || "$build_i686" == "on" || "$build_i686" == "true" ]]; then
   cmake -S "$mdlforge_root" -B "$build_dir_i686" \

@@ -7,17 +7,17 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 REF_ROOT="${HOME}/Documents/decompiled models"
-TMP_ROOT="${ROOT}/.tmp/decompile-regress"
-CLI="dotnet run --project ${ROOT}/src/Stunstick.Cli --"
+CLI=(dotnet run --project "${ROOT}/src/Stunstick.Cli" --)
 
 usage() {
   cat <<'EOF'
-Usage: decompile_regress.sh [--subset pattern] [--keep-temp]
+Usage: decompile_regress.sh [--reference-root directory] [--subset pattern] [--keep-temp]
 
-  --subset pattern   Only run models whose path contains pattern (case-insensitive).
-  --keep-temp        Do not delete temp outputs (keeps .tmp/decompile-regress).
+  --reference-root directory   Compare against this reference corpus.
+  --subset pattern             Only run models whose path contains pattern (case-insensitive).
+  --keep-temp                  Retain temp outputs and print their location.
 
-Reference corpus: ~/Documents/decompiled models/
+Default reference corpus: ~/Documents/decompiled models/
 Outputs will be compared to any folder containing manifest.json (Crowbar-style layout).
 EOF
 }
@@ -26,7 +26,17 @@ subset=""
 keep_temp=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --subset) subset="$2"; shift 2 ;;
+    --reference-root|--subset)
+      if [[ $# -lt 2 || -z "$2" ]]; then
+        echo "Missing value for $1" >&2
+        exit 1
+      fi
+      if [[ "$1" == "--reference-root" ]]; then
+        REF_ROOT="$2"
+      else
+        subset="$2"
+      fi
+      shift 2 ;;
     --keep-temp) keep_temp=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown arg: $1" >&2; usage; exit 1 ;;
@@ -38,10 +48,6 @@ if [[ ! -d "$REF_ROOT" ]]; then
   exit 1
 fi
 
-rm -rf "$TMP_ROOT"
-mkdir -p "$TMP_ROOT"
-
-shopt -s globstar nullglob
 refs=()
 while IFS= read -r -d '' manifest; do
   model_dir="$(dirname "$manifest")"
@@ -60,9 +66,15 @@ fi
 
 pass=0
 fail=0
+TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/stunstick-decompile-regress.XXXXXX")"
+if [[ $keep_temp -eq 1 ]]; then
+  echo "Temporary outputs: $TMP_ROOT"
+else
+  trap 'rm -rf "$TMP_ROOT"' EXIT
+fi
 
 for ref in "${refs[@]}"; do
-  mdl="$(python - "$ref/manifest.json" <<'PY' || true
+  mdl="$(python3 - "$ref/manifest.json" <<'PY'
 import json,sys
 try:
     with open(sys.argv[1], 'r', encoding='utf-8') as f:
@@ -74,14 +86,14 @@ except Exception:
     pass
 PY
 )"
-  if [[ -z "$mdl" || ! -f "$mdl" ]]; then
-    echo "[SKIP] Missing or unreadable SourceMdlPath in $ref/manifest.json"
+  if [[ -z "$mdl" || ! -f "$mdl" || ! -r "$mdl" ]]; then
+    echo "[FAIL] Missing or unreadable SourceMdlPath in $ref/manifest.json"
+    fail=$((fail+1))
     continue
   fi
 
   name="$(basename "$ref")"
-  out="$TMP_ROOT/$name"
-  mkdir -p "$out"
+  out="$(mktemp -d "$TMP_ROOT/case.XXXXXX")"
 
   model_base="$(basename "$mdl")"
   model_stem="${model_base%.mdl}"
@@ -100,7 +112,7 @@ PY
   want_prefix=0; pref_ref=( "$ref"/"${model_stem}"_ref_bodypart*_lod0.smd ); (( ${#pref_ref[@]} > 0 )) && want_prefix=1
   shopt -u nullglob
 
-  args=(decompile --mdl "$mdl" --out "$out" --log)
+  args=(decompile --mdl "$mdl" --flat-output --log)
   [[ $want_qc -eq 0 ]] && args+=(--no-qc)
   [[ $want_ref_smds -eq 0 ]] && args+=(--no-ref-smds)
   [[ $want_lods -eq 0 ]] && args+=(--no-lods)
@@ -121,42 +133,23 @@ PY
     fi
   fi
 
-  echo "[RUN ] $name"
-  if ! $CLI "${args[@]}" >/dev/null 2>&1; then
+  echo "[RUN ] $name ($out)"
+  if ! "${CLI[@]}" "${args[@]}" --out "$out" >"$out/decompile-command.log" 2>&1; then
     echo "[FAIL] decompile error for $name"
+    cat "$out/decompile-command.log"
     fail=$((fail+1))
     continue
-  fi
-
-  # If output contains a single subfolder, drill in (matches folder-per-model).
-  if [[ $(find "$out" -mindepth 1 -maxdepth 1 -type d | wc -l) -eq 1 ]]; then
-    out="$(find "$out" -mindepth 1 -maxdepth 1 -type d | head -n1)"
   fi
 
   if diff -qr -x manifest.json -x original -x "*.log" "$ref" "$out" >/dev/null; then
     echo "[PASS] $name"
     pass=$((pass+1))
   else
-    # Optional retry with opposite UVs to match certain refs.
-    retried=0
-    if [[ " ${args[*]} " != *" --non-valve-uv "* && " ${args[*]} " != *" --valve-uv "* ]]; then
-      retried=1
-      rm -rf "$out"
-      mkdir -p "$out"
-      uvflag="--non-valve-uv"
-      # Default DecompileOptions use Valve UV; flip when retrying.
-      if $CLI "${args[@]}" "$uvflag" >/dev/null 2>&1; then
-        if diff -qr -x manifest.json -x original -x "*.log" "$ref" "$out" >/dev/null; then
-          echo "[PASS] $name (uv flipped)"
-          pass=$((pass+1))
-          continue
-        fi
-      fi
-    fi
-
-    # Some models are tolerated with close-but-not-byte-equal anims.
-    if [[ "$name" == "c_arms_pointing" || "$name" == "alyx" || "$name" == "sierra_pm" ]]; then
-      echo "[CLOSE] $name (animation-only diffs tolerated)"
+    # Retry with the other UV convention used by the reference corpus.
+    retry="$(mktemp -d "$TMP_ROOT/flipped-uv.XXXXXX")"
+    if "${CLI[@]}" "${args[@]}" --out "$retry" --non-valve-uv >"$retry/decompile-command.log" 2>&1 &&
+      diff -qr -x manifest.json -x original -x "*.log" "$ref" "$retry" >/dev/null; then
+      echo "[PASS] $name (uv flipped)"
       pass=$((pass+1))
       continue
     fi
@@ -165,14 +158,10 @@ PY
     fail=$((fail+1))
     # Allow the loop to continue even when differences are found.
     diff -qr -x manifest.json -x original -x "*.log" "$ref" "$out" | sed 's/^/  /' || true
-    [[ $retried -eq 1 ]] && echo "  (retry with --non-valve-uv did not match)"
+    echo "  (retry with --non-valve-uv did not match)"
   fi
 done
 
 echo "Done. pass=$pass fail=$fail"
-
-if [[ $keep_temp -ne 1 ]]; then
-  rm -rf "$TMP_ROOT"
-fi
 
 exit $((fail>0))

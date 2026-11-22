@@ -1,0 +1,4 @@
+Source: https://github.com/programmer1o1/MDLForge
+Commit: f239bb900c7973bc5f39a71cfbf76caab6b0351c
+Imported: vendor/vphysics/src and vendor/vphysics/LICENSE
+License: MIT (see LICENSE).

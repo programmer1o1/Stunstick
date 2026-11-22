@@ -8,7 +8,7 @@ internal sealed class Program
 	[STAThread]
 	public static void Main(string[] args)
 	{
-		if (!SingleInstanceIpc.TryStartOrForward(args))
+		if (DesktopSettings.ReadSingleInstanceEnabled() && !SingleInstanceIpc.TryStartOrForward(args))
 		{
 			return;
 		}

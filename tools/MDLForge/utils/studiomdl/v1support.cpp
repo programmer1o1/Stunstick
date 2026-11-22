@@ -21,6 +21,10 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <math.h>
+#include <cstdint>
+#include <cstring>
+#include <unordered_map>
+#include <vector>
 
 #include "cmdlib.h"
 #include "scriplib.h"
@@ -29,22 +33,40 @@
 #include "studiomdl.h"
 
 
-int lookup_index( s_source_t *psource, int material, Vector& vertex, Vector& normal, Vector2D texcoord )
-{
-	int i;
+using SmdVertexLookup = std::unordered_map<std::uint64_t, std::vector<int>>;
 
-	for (i = 0; i < numvlist; i++) 
+static std::uint64_t SmdVertexKey( int material, const Vector &vertex, const Vector2D &texcoord )
+{
+	const float components[] = { vertex.x, vertex.y, vertex.z, texcoord.x, texcoord.y };
+	std::uint64_t hash = 14695981039346656037ULL;
+	for ( float component : components )
 	{
-		if (v_listdata[i].m == material
-			&& DotProduct( g_normal[i], normal ) > normal_blend
-			&& VectorCompare( g_vertex[i], vertex )
-			&& g_texcoord[i][0] == texcoord[0]
-			&& g_texcoord[i][1] == texcoord[1])
+		std::uint32_t bits = 0;
+		if ( component != 0.0f )
+			std::memcpy( &bits, &component, sizeof( bits ) );
+		hash = ( hash ^ bits ) * 1099511628211ULL;
+	}
+	return ( hash ^ static_cast<std::uint32_t>( material ) ) * 1099511628211ULL;
+}
+
+static int LookupSmdVertex( s_source_t *psource, int material, Vector &vertex, Vector &normal,
+	const Vector2D &texcoord, SmdVertexLookup &lookup )
+{
+	// Keep insertion order so the first matching normal wins, as in the original scan.
+	auto &candidates = lookup[SmdVertexKey( material, vertex, texcoord )];
+	for ( int index : candidates )
+	{
+		if ( v_listdata[index].m == material
+			&& DotProduct( g_normal[index], normal ) > normal_blend
+			&& VectorCompare( g_vertex[index], vertex )
+			&& g_texcoord[index][0] == texcoord[0]
+			&& g_texcoord[index][1] == texcoord[1] )
 		{
-			v_listdata[i].lastref = numvlist;
-			return i;
+			v_listdata[index].lastref = numvlist;
+			return index;
 		}
 	}
+	const int i = numvlist;
 	if (i >= MAXSTUDIOVERTS) {
 		MdlError( "too many indices in source: \"%s\"\n", psource->filename);
 	}
@@ -62,11 +84,12 @@ int lookup_index( s_source_t *psource, int material, Vector& vertex, Vector& nor
 	v_listdata[i].lastref = numvlist;
 
 	numvlist = i + 1;
+	candidates.push_back( i );
 	return i;
 }
 
 
-void ParseFaceData( s_source_t *psource, int material, s_face_t *pFace )
+static void ParseFaceData( s_source_t *psource, int material, s_face_t *pFace, SmdVertexLookup &lookup )
 {
 	int index[3];
 	int i, j;
@@ -161,7 +184,7 @@ void ParseFaceData( s_source_t *psource, int material, s_face_t *pFace )
 		// invert v
 		t[1] = 1.0 - t[1];
 
-		index[j] = lookup_index( psource, material, p, normal, t );
+		index[j] = LookupSmdVertex( psource, material, p, normal, t, lookup );
 
 		if (i == 9 || iCount == 0)
 		{
@@ -206,6 +229,7 @@ void Grab_Triangles( s_source_t *psource )
 
 	g_numfaces = 0;
 	numvlist = 0;
+	SmdVertexLookup lookup;
  
 	//
 	// load the base triangles
@@ -279,8 +303,11 @@ void Grab_Triangles( s_source_t *psource )
 		psource->texmap[texture] = texture;	// hack, make it 1:1
 		material = use_texture_as_material( texture );
 
+		if ( g_numfaces >= MAXSTUDIOTRIANGLES )
+			MdlError( "%s: too many triangles (maximum %d)\n", psource->filename, MAXSTUDIOTRIANGLES );
+
 		s_face_t f;
-		ParseFaceData( psource, material, &f );
+		ParseFaceData( psource, material, &f, lookup );
 	
 		g_src_uface[g_numfaces] = f;
 		g_face[g_numfaces].material = material;

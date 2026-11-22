@@ -82,6 +82,11 @@ public sealed class StunstickApplication
 		string? gameDirectory = request.GameDirectory;
 		string? studioMdlPath = request.StudioMdlPath;
 		var qcUsesCollisionModel = !OperatingSystem.IsWindows() && QcFileUsesCollisionModel(request.QcPath);
+		var nativeCollisionSetting = Environment.GetEnvironmentVariable("MDLFORGE_ALLOW_NATIVE_COLLISION");
+		var experimentalNativeCollision = !string.IsNullOrEmpty(nativeCollisionSetting) && nativeCollisionSetting[0] != '0';
+		bool HasMacPhysicsCompanion(string toolPath) =>
+			OperatingSystem.IsMacOS() && nativeCollisionSetting?.StartsWith('0') != true &&
+			File.Exists(Path.Combine(Path.GetDirectoryName(toolPath) ?? string.Empty, "libvphysics.dylib"));
 		string? vphysicsSearchGameDirectory = null;
 
 		if (request.SteamAppId is not null)
@@ -100,14 +105,18 @@ public sealed class StunstickApplication
 			}
 		}
 
-		// $collisionmodel/$collisionjoints requires .phy generation. On Linux/macOS the bundled (internal) StudioMDL
-		// doesn't generate .phy, so prefer a Windows studiomdl.exe under Wine/Proton when available.
-		if (!OperatingSystem.IsWindows() &&
-		    qcUsesCollisionModel &&
-		    string.IsNullOrWhiteSpace(request.StudioMdlPath) &&
-		    string.IsNullOrWhiteSpace(studioMdlPath))
+		if (qcUsesCollisionModel && string.IsNullOrWhiteSpace(request.StudioMdlPath))
 		{
-			studioMdlPath = ToolchainDiscovery.FindStudioMdlExePathWithSteamHints(request.SteamRoot);
+			var bundled = ToolchainDiscovery.FindBundledStudioMdlPath();
+			if (bundled is not null && !bundled.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
+			    (HasMacPhysicsCompanion(bundled) || experimentalNativeCollision))
+			{
+				studioMdlPath = bundled;
+			}
+			else if (string.IsNullOrWhiteSpace(studioMdlPath))
+			{
+				studioMdlPath = ToolchainDiscovery.FindStudioMdlExePathWithSteamHints(request.SteamRoot);
+			}
 		}
 
 		// For non-collision compiles on Linux/macOS, prefer the bundled native studiomdl over Windows-only toolchains.
@@ -157,10 +166,10 @@ public sealed class StunstickApplication
 			throw new FileNotFoundException("StudioMDL not found. Pass --studiomdl or --game/--steam-appid, or place a bundled \"studiomdl\" under tools/studiomdl next to the Stunstick executable.");
 		}
 
-		// On Linux/macOS, the bundled (internal) StudioMDL doesn't generate .phy for $collisionmodel/$collisionjoints.
-		// When possible, automatically fall back to a Windows studiomdl.exe under Wine/Proton so users get collision output.
+		// Use the Windows compiler as the fallback when bundled native collision is unavailable.
 		if (qcUsesCollisionModel &&
-		    !OperatingSystem.IsWindows() &&
+		    !experimentalNativeCollision && !HasMacPhysicsCompanion(studioMdlPath) &&
+		    string.IsNullOrWhiteSpace(request.StudioMdlPath) &&
 		    !studioMdlPath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
 		{
 			static string NormalizePathForComparison(string path)
@@ -210,10 +219,10 @@ public sealed class StunstickApplication
 		}
 
 		if (qcUsesCollisionModel &&
-		    !OperatingSystem.IsWindows() &&
+		    !experimentalNativeCollision && !HasMacPhysicsCompanion(studioMdlPath) &&
 		    !studioMdlPath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
 		{
-			request.Output?.Report("STUNSTICK NOTE: On Linux/macOS, the bundled (internal) StudioMDL does not generate .phy for $collisionmodel/$collisionjoints. Use studiomdl.exe via Wine/Proton when you need collision output.");
+			request.Output?.Report("STUNSTICK NOTE: Native StudioMDL may skip .phy generation unless a compatible physics library is configured. Windows studiomdl.exe via Wine/Proton is another option.");
 		}
 
 		StreamWriter? defineBonesWriter = null;

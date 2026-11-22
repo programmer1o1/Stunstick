@@ -134,7 +134,11 @@ internal static class WorkshopPublisher
 				CreatedAtUtc: i.CreatedAtUtc,
 				UpdatedAtUtc: i.UpdatedAtUtc,
 				Visibility: i.Visibility,
-				Tags: i.Tags)).ToArray());
+				Tags: i.Tags)
+			{
+				OwnerSteamId = i.OwnerSteamId,
+				OwnerName = i.OwnerName
+			}).ToArray());
 	}
 
 	public static async Task<WorkshopQuotaResult> GetQuotaAsync(WorkshopQuotaRequest request, CancellationToken cancellationToken)

@@ -414,7 +414,7 @@ internal static class MdlDecompiler
 			}
 		}
 
-		var hasPhysics = false;
+	PhyFile? exportedPhysics = null;
 		if (phy is not null && options.WritePhysicsMeshSmdFile)
 		{
 			try
@@ -422,8 +422,11 @@ internal static class MdlDecompiler
 				var physicsPathFileName = Path.Combine(modelOutputFolder, "physics.smd");
 				var wrotePhysics = await WritePhysicsSmdAsync(physicsPathFileName, model, phy, options, mdlAccessedBytesLog, accessedBytesDebugLogs, cancellationToken);
 
-				// Keep QC safe: we still don't emit $collisionjoints/options, so only reference physics when there's one solid.
-				hasPhysics = wrotePhysics && phy.Header.SolidCount == 1;
+				if (wrotePhysics && (phy.Header.SolidCount == 1 ||
+					(phy.Solids.Count == phy.Header.SolidCount && phy.Collision?.Solids.Count == phy.Header.SolidCount)))
+				{
+					exportedPhysics = phy;
+				}
 			}
 			catch
 			{
@@ -436,9 +439,9 @@ internal static class MdlDecompiler
 			await WriteReferenceSmdsAsync(modelOutputFolder, modelName, model, vvd, vtx, options, cancellationToken);
 		}
 
-			if (vtx is not null && options.WriteQcFile)
+			if (options.WriteQcFile && (vtx is not null || model.BodyParts.Count == 0))
 			{
-				await WriteQcAsync(modelOutputFolder, modelName, model, vtx, hasPhysics, proceduralBonesVrdFileName, options, animationSmdRelativePathFileNames, vtaResult, cancellationToken);
+				await WriteQcAsync(modelOutputFolder, modelName, model, vtx, exportedPhysics, proceduralBonesVrdFileName, options, animationSmdRelativePathFileNames, vtaResult, cancellationToken);
 			}
 
 			if (options.WriteDeclareSequenceQciFile)
@@ -703,6 +706,11 @@ internal static class MdlDecompiler
 				cancellationToken.ThrowIfCancellationRequested();
 
 				var mdlSubModel = mdlBodyPart.Models[modelIndex];
+				if (mdlSubModel.IsBlank)
+				{
+					continue;
+				}
+
 				var vtxModel = (vtxBodyPart is not null && modelIndex < vtxBodyPart.Models.Count)
 					? vtxBodyPart.Models[modelIndex]
 					: new VtxModel(LodCount: 0, Lods: Array.Empty<VtxModelLod>());
@@ -754,8 +762,8 @@ internal static class MdlDecompiler
 		string modelOutputFolder,
 		string modelFileNamePrefix,
 		MdlModel model,
-		VtxFile vtx,
-		bool hasPhysics,
+		VtxFile? vtx,
+		PhyFile? physics,
 		string? proceduralBonesVrdFileName,
 		DecompileOptions options,
 		IReadOnlyDictionary<int, string>? animationSmdRelativePathFileNames,
@@ -773,7 +781,7 @@ internal static class MdlDecompiler
 			? Path.GetFileName(model.SourcePath)
 			: model.Header.Name;
 
-		await writer.WriteLineAsync($"{(options.QcUseMixedCaseForKeywords ? "$ModelName" : "$modelname")} \"{modelName.Replace("\"", "'")}\"");
+		await writer.WriteLineAsync($"{(options.QcUseMixedCaseForKeywords ? "$ModelName" : "$modelname")} \"{modelName.Replace('\\', '/').Replace("\"", "'")}\"");
 
 		if ((model.Header.Flags & MdlConstants.StudioHdrFlagsStaticProp) != 0)
 		{
@@ -819,6 +827,7 @@ internal static class MdlDecompiler
 			await writer.WriteLineAsync();
 			await writer.WriteLineAsync($"{keyword} \"{vrd}\"");
 		}
+		await MdlJiggleBoneQcWriter.WriteAsync(writer, model.Bones, options);
 
 		int? modelCommandBodyPartIndex = null;
 		if (vtaResult is not null && vtaResult.FlexFrames.Count > 1)
@@ -829,20 +838,21 @@ internal static class MdlDecompiler
 			for (var bodyPartIndex = 0; bodyPartIndex < model.BodyParts.Count; bodyPartIndex++)
 			{
 				var bodyPart = model.BodyParts[bodyPartIndex];
-				if (modelCommandBodyPartIndex == bodyPartIndex)
+				var hasFlexBody = modelCommandBodyPartIndex == bodyPartIndex;
+				if (hasFlexBody || (bodyPart.Models.Count == 1 && bodyPart.Models[0].Eyeballs.Count > 0))
 				{
 				var modelNameForCommand = string.IsNullOrWhiteSpace(bodyPart.Name) ? $"bodypart{bodyPartIndex}" : bodyPart.Name;
 				modelNameForCommand = modelNameForCommand.Replace("\"", "'");
 
 					var smdFileName = GetMeshSmdFileName(modelFileNamePrefix, bodyPartIndex, modelIndex: 0, lodIndex: 0, options);
 					await writer.WriteLineAsync();
-					await writer.WriteLineAsync($"{(options.QcUseMixedCaseForKeywords ? "$Model" : "$model")} \"{modelNameForCommand}\" \"{smdFileName}\"");
-					await writer.WriteLineAsync("{");
+					await writer.WriteLineAsync($"{(options.QcUseMixedCaseForKeywords ? "$Model" : "$model")} \"{modelNameForCommand}\" \"{smdFileName}\" {{");
 
-				if (vtaResult is not null)
-				{
-					await WriteFlexGroupAsync(writer, model, vtaResult, indent: "    ", cancellationToken);
-				}
+					var eyelidFlexes = await WriteEyeOptionsAsync(writer, model, bodyPart.Models[0], hasFlexBody ? vtaResult : null);
+					if (hasFlexBody && vtaResult is not null)
+					{
+						await WriteFlexGroupAsync(writer, model, vtaResult, indent: "    ", cancellationToken, eyelidFlexes);
+					}
 
 				await writer.WriteLineAsync("}");
 				continue;
@@ -856,82 +866,308 @@ internal static class MdlDecompiler
 				await writer.WriteLineAsync("{");
 				for (var modelIndex = 0; modelIndex < bodyPart.Models.Count; modelIndex++)
 				{
-					var smdFileName = GetMeshSmdFileName(modelFileNamePrefix, bodyPartIndex, modelIndex, lodIndex: 0, options);
-					await writer.WriteLineAsync($"    studio \"{smdFileName}\"");
+					if (bodyPart.Models[modelIndex].IsBlank)
+					{
+						await writer.WriteLineAsync("    blank");
+					}
+					else
+					{
+						var smdFileName = GetMeshSmdFileName(modelFileNamePrefix, bodyPartIndex, modelIndex, lodIndex: 0, options);
+						await writer.WriteLineAsync($"    studio \"{smdFileName}\"");
+					}
 				}
 				await writer.WriteLineAsync("}");
 			}
 
-			WriteLodGroups(writer, modelFileNamePrefix, options, model, vtx);
+			if (vtx is not null)
+			{
+				WriteLodGroups(writer, modelFileNamePrefix, options, model, vtx);
+			}
 
 		if (modelCommandBodyPartIndex is null && vtaResult is not null)
 		{
 			await WriteFlexGroupAsync(writer, model, vtaResult, indent: string.Empty, cancellationToken);
 		}
 
-		var wroteAnySequences = false;
-		if ((model.Header.Flags & MdlConstants.StudioHdrFlagsStaticProp) == 0 &&
-			animationSmdRelativePathFileNames is not null &&
-			animationSmdRelativePathFileNames.Count > 0 &&
-			model.SequenceDescs.Count > 0)
+		if ((model.Header.Flags & MdlConstants.StudioHdrFlagsStaticProp) == 0)
 		{
-			var sequenceKeyword = options.QcUseMixedCaseForKeywords ? "$Sequence" : "$sequence";
-
-			for (var i = 0; i < model.SequenceDescs.Count; i++)
+			if (model.IkChains.Count > 0)
 			{
-				var seq = model.SequenceDescs[i];
-				var animIndex = seq.AnimDescIndexes.Count > 0 ? seq.AnimDescIndexes[0] : (short)-1;
-				if (animIndex < 0)
-				{
-					continue;
-				}
-
-				if (!animationSmdRelativePathFileNames.TryGetValue(animIndex, out var animSmdRelativePathFileName))
-				{
-					continue;
-				}
-
-				var sequenceName = string.IsNullOrWhiteSpace(seq.Name) ? $"sequence_{seq.Index}" : seq.Name;
-				sequenceName = sequenceName.Replace("\"", "'");
-				animSmdRelativePathFileName = animSmdRelativePathFileName.Replace("\"", "'");
-
 				await writer.WriteLineAsync();
-				await writer.WriteLineAsync($"{sequenceKeyword} \"{sequenceName}\" \"{animSmdRelativePathFileName}\"");
-				wroteAnySequences = true;
+				var keyword = options.QcUseMixedCaseForKeywords ? "$IKChain" : "$ikchain";
+				foreach (var chain in model.IkChains)
+				{
+					var name = chain.Name.Replace('"', '\'');
+					var bone = model.Bones[chain.EndBoneIndex].Name.Replace('"', '\'');
+					var knee = chain.KneeDirection;
+					await writer.WriteLineAsync(FormattableString.Invariant(
+						$"{keyword} \"{name}\" \"{bone}\" knee {knee.X:0.###} {knee.Y:0.###} {knee.Z:0.###}"));
+				}
 			}
+
 		}
 
-		if (!wroteAnySequences && (model.Header.Flags & MdlConstants.StudioHdrFlagsStaticProp) == 0)
-		{
-			await writer.WriteLineAsync();
-			await writer.WriteLineAsync($"{(options.QcUseMixedCaseForKeywords ? "$Sequence" : "$sequence")} \"idle\" \"skeleton.smd\"");
-		}
+		await WriteSequencesAsync(writer, modelOutputFolder, model, options, animationSmdRelativePathFileNames, cancellationToken);
 
-		if (hasPhysics)
+		if (physics is not null)
 		{
-			await writer.WriteLineAsync();
-			await writer.WriteLineAsync($"{(options.QcUseMixedCaseForKeywords ? "$CollisionModel" : "$collisionmodel")} \"physics.smd\"");
-			await writer.WriteLineAsync("{");
-			await writer.WriteLineAsync($"    {(options.QcUseMixedCaseForKeywords ? "$Mass" : "$mass")} 1");
-			await writer.WriteLineAsync("}");
-		}
-
-		var hasShadowLodFlag = (model.Header.Flags & MdlConstants.StudioHdrFlagsHasShadowLod) != 0 || (model.Header.Flags & MdlConstants.StudioHdrFlagsUseShadowlodMaterials) != 0;
-		var hasLod1 = vtx.BodyParts.Any(bp => bp.Models.Any(m => m.Lods.Count > 1));
-		if (hasShadowLodFlag && hasLod1)
-		{
-			var firstBodyPart = model.BodyParts.FirstOrDefault();
-			var bodyName = string.IsNullOrWhiteSpace(firstBodyPart?.Name) ? "bodypart0" : firstBodyPart!.Name.Replace("\"", "'");
-			var shadowLodSmd = GetMeshSmdFileName(modelFileNamePrefix, bodyPartIndex: 0, modelIndex: 0, lodIndex: 1, options);
-
-			await writer.WriteLineAsync();
-			await writer.WriteLineAsync(options.QcUseMixedCaseForKeywords ? "$ShadowLOD" : "$shadowlod");
-			await writer.WriteLineAsync("{");
-			await writer.WriteLineAsync($"    replacemodel \"{bodyName}\" \"{shadowLodSmd}\"");
-			await writer.WriteLineAsync("}");
+			await MdlCollisionQcWriter.WriteAsync(writer, physics, model.Mass, options);
 		}
 
 		await writer.FlushAsync();
+	}
+
+	private static async Task WriteSequencesAsync(
+		StreamWriter writer,
+		string modelOutputFolder,
+		MdlModel model,
+		DecompileOptions options,
+		IReadOnlyDictionary<int, string>? animationPaths,
+		CancellationToken cancellationToken)
+	{
+		var sequenceKeyword = options.QcUseMixedCaseForKeywords ? "$Sequence" : "$sequence";
+		var wroteSequence = false;
+		if (animationPaths is { Count: > 0 })
+		{
+			var animationKeyword = options.QcUseMixedCaseForKeywords ? "$Animation" : "$animation";
+			var exportedSequences = model.SequenceDescs.Where(sequence => sequence.AnimDescIndexes.Count > 0 &&
+				animationPaths.ContainsKey(sequence.AnimDescIndexes[0])).ToArray();
+			var weightListKeyword = options.QcUseMixedCaseForKeywords ? "$WeightList" : "$weightlist";
+			var weightLists = await WriteSequenceWeightListsAsync(writer, model.Bones, exportedSequences, weightListKeyword, cancellationToken);
+			var correctiveOptions = new Dictionary<int, string>();
+			var rootBones = model.Bones.Where(bone => bone.ParentIndex == -1).Select(bone => bone.Index).ToHashSet();
+			var usedNames = model.SequenceDescs.Select(sequence => QuoteQcValue(GetSequenceName(sequence)))
+				.ToHashSet(StringComparer.OrdinalIgnoreCase);
+			if (rootBones.Count > 0)
+			{
+				foreach (var sequence in exportedSequences.Where(seq => (seq.Flags & MdlConstants.StudioSequenceDelta) != 0))
+				{
+					foreach (var index in sequence.AnimDescIndexes)
+					{
+						if (correctiveOptions.ContainsKey(index) || !animationPaths.TryGetValue(index, out var path))
+						{
+							continue;
+						}
+
+						var correctivePath = await MdlCorrectiveAnimationWriter.WriteAsync(modelOutputFolder, path, rootBones, cancellationToken);
+						if (correctivePath is null)
+						{
+							continue;
+						}
+
+						var name = ReserveAnimationName(Path.GetFileNameWithoutExtension(correctivePath), index);
+						await writer.WriteLineAsync($"{animationKeyword} {QuoteQcValue(name)} {QuoteQcValue(correctivePath)}");
+						var subtract = (sequence.Flags & MdlConstants.StudioSequencePost) != 0 ? "subtract" : "presubtract";
+						correctiveOptions.Add(index, $"{subtract} {QuoteQcValue(name)} 0");
+					}
+				}
+			}
+
+			var useNamedAnimations = correctiveOptions.Count > 0 || weightLists.Count > 0 || exportedSequences.Any(seq => seq.AnimDescIndexes.Count > 1);
+			var animationNames = new Dictionary<(int Index, string? WeightList), string>();
+			if (useNamedAnimations)
+			{
+				// StudioMDL merges the animations' weights to get the sequence weights.
+				// When sequences share an animation with different weights, give each mask its own QC entry.
+				var animationWeights = exportedSequences.SelectMany(sequence => sequence.AnimDescIndexes.Select(index =>
+					(Index: (int)index, WeightList: weightLists.GetValueOrDefault(sequence.Index))))
+					.ToLookup(entry => entry.Index, entry => entry.WeightList);
+				await writer.WriteLineAsync();
+				foreach (var (index, path) in animationPaths.OrderBy(entry => entry.Key))
+				{
+					cancellationToken.ThrowIfCancellationRequested();
+					var animation = model.AnimationDescs.ElementAtOrDefault(index);
+					var fpsOption = GetAnimationFpsOption(model, index);
+					var loopOption = animation is not null &&
+						(animation.Flags & MdlConstants.StudioSequenceLooping) != 0 ? " loop" : string.Empty;
+					foreach (var weightList in animationWeights[index].Distinct().DefaultIfEmpty())
+					{
+						var name = ReserveAnimationName(animation?.Name, index);
+						animationNames.Add((index, weightList), name);
+						await WriteAnimationCommandAsync(writer,
+							$"{animationKeyword} {QuoteQcValue(name)} {QuoteQcValue(path)}{fpsOption}{loopOption}",
+							animation, correctiveOptions.GetValueOrDefault(index), weightList);
+					}
+				}
+			}
+
+			foreach (var sequence in exportedSequences)
+			{
+				cancellationToken.ThrowIfCancellationRequested();
+				var firstIndex = sequence.AnimDescIndexes[0];
+				var weightList = weightLists.GetValueOrDefault(sequence.Index);
+				var sequenceLine = $"{sequenceKeyword} {QuoteQcValue(GetSequenceName(sequence))}";
+				var loopOption = (sequence.Flags & MdlConstants.StudioSequenceLooping) != 0 ? " loop" : string.Empty;
+				var deltaOption = (sequence.Flags & MdlConstants.StudioSequenceDelta) == 0 ? string.Empty
+					: (sequence.Flags & MdlConstants.StudioSequencePost) != 0 ? " delta" : " predelta";
+				await writer.WriteLineAsync();
+				if (sequence.AnimDescIndexes.Count > 1 && sequence.AnimDescIndexes.All(index => animationPaths.ContainsKey(index)))
+				{
+					await writer.WriteLineAsync(sequenceLine + " {");
+					foreach (var index in sequence.AnimDescIndexes)
+					{
+						await writer.WriteLineAsync($"    {QuoteQcValue(animationNames[(index, weightList)])}");
+					}
+
+					await writer.WriteLineAsync($"    blendwidth {sequence.GroupSize0}");
+					foreach (var axis in sequence.BlendAxes)
+					{
+						await writer.WriteLineAsync(FormattableString.Invariant(
+							$"    blend {QuoteQcValue(axis.Name)} {axis.Start} {axis.End}"));
+					}
+
+					if (loopOption.Length != 0)
+					{
+						await writer.WriteLineAsync("    loop");
+					}
+
+					if (deltaOption.Length != 0)
+					{
+						await writer.WriteLineAsync("   " + deltaOption);
+					}
+
+					await writer.WriteLineAsync("}");
+				}
+				else
+				{
+					var animation = useNamedAnimations ? animationNames[(firstIndex, weightList)] : animationPaths[firstIndex];
+					var fpsOption = useNamedAnimations ? string.Empty : GetAnimationFpsOption(model, firstIndex);
+					await WriteAnimationCommandAsync(writer,
+						$"{sequenceLine} {QuoteQcValue(animation)}{fpsOption}{loopOption}{deltaOption}",
+						useNamedAnimations ? null : model.AnimationDescs.ElementAtOrDefault(firstIndex));
+				}
+
+				wroteSequence = true;
+			}
+
+			string ReserveAnimationName(string? name, int index)
+			{
+				if (!string.IsNullOrWhiteSpace(name) && usedNames.Add(QuoteQcValue(name)))
+				{
+					return name;
+				}
+
+				name = $"@stunstick_anim_{index}";
+				while (!usedNames.Add(QuoteQcValue(name)))
+				{
+					name += "_";
+				}
+
+				return name;
+			}
+		}
+
+		if (!wroteSequence)
+		{
+			await writer.WriteLineAsync();
+			await writer.WriteLineAsync($"{sequenceKeyword} \"idle\" \"skeleton.smd\"");
+		}
+	}
+
+	private static string GetSequenceName(MdlSequenceDesc sequence) =>
+		string.IsNullOrWhiteSpace(sequence.Name) ? $"sequence_{sequence.Index}" : sequence.Name;
+
+	private static string QuoteQcValue(string value) => $"\"{value.Replace("\"", "'")}\"";
+
+	private static async Task<Dictionary<int, string>> WriteSequenceWeightListsAsync(StreamWriter writer,
+		IReadOnlyList<MdlBone> bones, IReadOnlyList<MdlSequenceDesc> sequences, string keyword, CancellationToken cancellationToken)
+	{
+		var sequenceNames = new Dictionary<int, string>();
+		var lists = new List<(string Name, IReadOnlyList<float> Weights)>();
+		var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+		foreach (var sequence in sequences)
+		{
+			cancellationToken.ThrowIfCancellationRequested();
+			var weights = sequence.BoneWeights;
+			if (weights.Count != bones.Count || weights.All(weight => weight == 1))
+			{
+				continue;
+			}
+
+			var name = lists.Find(list => list.Weights.SequenceEqual(weights)).Name;
+			if (name is null)
+			{
+				name = $"weights_{GetSequenceName(sequence)}";
+				if (Encoding.UTF8.GetByteCount(name) >= 128 || !usedNames.Add(QuoteQcValue(name)))
+				{
+					name = $"weights_sequence_{sequence.Index}";
+					while (!usedNames.Add(QuoteQcValue(name)))
+					{
+						name += "_";
+					}
+				}
+				lists.Add((name, weights));
+				await writer.WriteLineAsync();
+				await writer.WriteLineAsync($"{keyword} {QuoteQcValue(name)} {{");
+				for (var i = 0; i < bones.Count; i++)
+				{
+					await writer.WriteLineAsync(FormattableString.Invariant($"    {QuoteQcValue(bones[i].Name)} {weights[i]:R}"));
+				}
+				await writer.WriteLineAsync("}");
+			}
+			sequenceNames.Add(sequence.Index, name);
+		}
+		return sequenceNames;
+	}
+
+	private static string GetAnimationFpsOption(MdlModel model, int index)
+	{
+		var fps = index < model.AnimationDescs.Count ? model.AnimationDescs[index].Fps : 0;
+		return float.IsFinite(fps) && fps > 0 && fps != 30
+			? $" fps {fps.ToString(CultureInfo.InvariantCulture)}"
+			: string.Empty;
+	}
+
+	private static async Task WriteAnimationCommandAsync(
+		StreamWriter writer, string command, MdlAnimationDesc? animation, string? correctiveOption = null, string? weightList = null)
+	{
+		if (correctiveOption is null && weightList is null && (animation is null || animation.Movements.Count == 0))
+		{
+			await writer.WriteLineAsync(command);
+			return;
+		}
+
+		// StudioMDL's motion tokens are ordered here by the corresponding Source movement flag bit.
+		string[] motionTokens = ["X", "Y", "Z", "XR", "YR", "ZR", "LX", "LY", "LZ", "LXR", "LYR", "LZR", "LM", "LQ"];
+		var endFrame = 0;
+		var startedBlock = correctiveOption is not null || weightList is not null;
+		if (startedBlock)
+		{
+			await writer.WriteLineAsync(command + " {");
+		}
+		if (correctiveOption is not null)
+		{
+			await writer.WriteLineAsync("    " + correctiveOption);
+		}
+		if (weightList is not null)
+		{
+			await writer.WriteLineAsync($"    weightlist {QuoteQcValue(weightList)}");
+		}
+
+		foreach (var movement in animation?.Movements ?? Array.Empty<MdlMovement>())
+		{
+			if (movement.EndFrameIndex <= endFrame || movement.EndFrameIndex >= animation!.FrameCount)
+			{
+				continue;
+			}
+
+			var motionOptions = string.Join(" ", motionTokens.Where((_, bit) => (movement.MotionFlags & (1 << bit)) != 0));
+			if (motionOptions.Length == 0)
+			{
+				continue;
+			}
+
+			if (!startedBlock)
+			{
+				await writer.WriteLineAsync(command + " {");
+				startedBlock = true;
+			}
+
+			await writer.WriteLineAsync($"    walkframe {movement.EndFrameIndex} {motionOptions}");
+			endFrame = movement.EndFrameIndex;
+		}
+
+		await writer.WriteLineAsync(startedBlock ? "}" : command);
 	}
 
 	private static async Task WriteTextureGroupAsync(StreamWriter writer, MdlModel model, DecompileOptions options, CancellationToken cancellationToken)
@@ -1177,7 +1413,8 @@ internal static class MdlDecompiler
 		MdlModel model,
 		MdlVertexAnimationVtaWriter.VtaResult vtaResult,
 		string indent,
-		CancellationToken cancellationToken)
+		CancellationToken cancellationToken,
+		IReadOnlySet<int>? eyelidFlexes = null)
 	{
 		if (vtaResult.FlexFrames.Count <= 1)
 		{
@@ -1194,6 +1431,13 @@ internal static class MdlDecompiler
 		for (var frameIndex = 1; frameIndex < vtaResult.FlexFrames.Count; frameIndex++)
 		{
 			var frame = vtaResult.FlexFrames[frameIndex];
+			if (eyelidFlexes?.Contains(frame.FlexDescIndex) == true ||
+				(eyelidFlexes is not null && frame.Flexes.Any(entry =>
+					entry.Flex.FlexDescPartnerIndex > 0 && eyelidFlexes.Contains(entry.Flex.FlexDescPartnerIndex))))
+			{
+				continue;
+			}
+
 			var flexName = (frame.FlexName ?? string.Empty).Replace("\"", "'");
 			if (string.IsNullOrWhiteSpace(flexName))
 			{
@@ -1306,6 +1550,75 @@ internal static class MdlDecompiler
 				var line = MdlFlexRuleFormatter.GetFlexRuleLine(model.FlexDescs, model.FlexControllers, rule, indent);
 				await writer.WriteLineAsync(line);
 			}
+		}
+	}
+
+	private static async Task<IReadOnlySet<int>> WriteEyeOptionsAsync(
+		StreamWriter writer, MdlModel model, MdlSubModel subModel, MdlVertexAnimationVtaWriter.VtaResult? vta)
+	{
+		var eyelidFlexes = new HashSet<int>();
+		foreach (var eye in subModel.Eyeballs)
+		{
+			var mesh = subModel.Meshes.FirstOrDefault(candidate => candidate.EyeballIndex == eye.Index);
+			if (mesh is null || (uint)mesh.MaterialIndex >= (uint)model.Textures.Count ||
+				(uint)eye.BoneIndex >= (uint)model.Bones.Count || eye.Radius <= 0 || eye.IrisScale <= 0 ||
+				!float.IsFinite(eye.Radius) || !float.IsFinite(eye.IrisScale) || !float.IsFinite(eye.ZOffset))
+			{
+				continue;
+			}
+
+			var bone = model.Bones[eye.BoneIndex];
+			var position = VectorITransform(eye.Origin, bone.PoseToBone);
+			if (!float.IsFinite(position.X) || !float.IsFinite(position.Y) || !float.IsFinite(position.Z))
+			{
+				continue;
+			}
+
+			var angle = Math.Atan(eye.ZOffset) * (180 / Math.PI);
+			var name = !string.IsNullOrWhiteSpace(eye.Name) ? eye.Name
+				: eye.Index == 0 && angle > 0 ? "eye_right"
+				: eye.Index == 1 && angle < 0 ? "eye_left"
+				: $"eye_{eye.Index}";
+			var material = GetMaterialName(model.Textures, mesh.MaterialIndex).Replace('"', '\'');
+			var boneName = bone.Name.Replace('"', '\'');
+			name = name.Replace('"', '\'');
+			await writer.WriteLineAsync(FormattableString.Invariant(
+				$"    eyeball \"{name}\" \"{boneName}\" {position.X:0.000000} {position.Y:0.000000} {position.Z:0.000000} \"{material}\" {2.0 * eye.Radius:0.######} {angle:0.######} \"iris_unused\" {1.0 / eye.IrisScale:0.######}"));
+
+			if (vta is not null && eye.UpperLid.FlexDescIndex != eye.UpperLid.LowererFlexDescIndex)
+			{
+				await WriteLidAsync(eye.UpperLid, name, vta);
+				await WriteLidAsync(eye.LowerLid, name, vta);
+			}
+		}
+
+		return eyelidFlexes;
+
+		async Task WriteLidAsync(MdlEyelid lid, string eyeName, MdlVertexAnimationVtaWriter.VtaResult result)
+		{
+			if ((uint)lid.FlexDescIndex >= (uint)model.FlexDescs.Count)
+			{
+				return;
+			}
+
+			var lidName = model.FlexDescs[lid.FlexDescIndex].Name.Replace('"', '\'');
+			var frames = result.FlexFrames.Skip(1).Where(frame => frame.FlexDescIndex == lid.FlexDescIndex ||
+				frame.Flexes.Any(entry => entry.Flex.FlexDescPartnerIndex > 0 &&
+					entry.Flex.FlexDescPartnerIndex == lid.FlexDescIndex));
+			var lowerer = frames.FirstOrDefault(frame => frame.Target0 == -11);
+			var raiser = frames.FirstOrDefault(frame => frame.Target3 == 11);
+			if (string.IsNullOrWhiteSpace(lidName) || lowerer is null || raiser is null ||
+				!float.IsFinite(lid.Targets.X) || !float.IsFinite(lid.Targets.Y) || !float.IsFinite(lid.Targets.Z))
+			{
+				return;
+			}
+
+			var split = lidName.Contains("right", StringComparison.OrdinalIgnoreCase) ? 1
+				: lidName.Contains("left", StringComparison.OrdinalIgnoreCase) ? -1 : 0;
+			var vtaName = result.VtaFileName.Replace('"', '\'');
+			await writer.WriteLineAsync(FormattableString.Invariant(
+				$"    eyelid \"{lidName}\" \"{vtaName}\" lowerer {lowerer.FrameIndex} {lid.Targets.X:0.##} neutral 0 {lid.Targets.Y:0.##} raiser {raiser.FrameIndex} {lid.Targets.Z:0.##} split {split} eyeball \"{eyeName}\""));
+			eyelidFlexes.Add(lid.FlexDescIndex);
 		}
 	}
 
@@ -1756,10 +2069,7 @@ internal static class MdlDecompiler
 				var mdlSubModel = mdlBodyPart.Models[modelIndex];
 				var vtxModel = vtxBodyPart.Models[modelIndex];
 
-				// Skip empty bodygroups (mirrors Crowbar behavior).
-				if (string.IsNullOrWhiteSpace(mdlSubModel.Name) &&
-				    vtxModel.Lods.Count > 0 &&
-				    vtxModel.Lods[0].Meshes.Count == 0)
+				if (mdlSubModel.IsBlank)
 				{
 					continue;
 				}
@@ -1873,7 +2183,7 @@ internal static class MdlDecompiler
 
 			writer.WriteLine("}");
 		}
-		else
+		else if ((model.Header.Flags & MdlConstants.StudioHdrFlagsHasShadowLod) != 0 || useShadowLodMaterials)
 		{
 			// Fallback shadow LOD selection.
 			var maxRegularLodIndex = lodGroups.Values.SelectMany(g => g.LodIndexes).DefaultIfEmpty(0).Max();
@@ -2195,29 +2505,31 @@ internal static class MdlDecompiler
 				normal = new System.Numerics.Vector3(normal.Y, -normal.X, normal.Z);
 			}
 
-			var u = vertex.TexCoord.X;
-			var v = options.UseNonValveUvConversion ? vertex.TexCoord.Y : 1 - vertex.TexCoord.Y;
+			// Crowbar widens VVD coordinates before doing UV math and formatting SMD decimals.
+			// Formatting Single directly can collapse distinct positions at larger coordinates.
+			var u = (double)vertex.TexCoord.X;
+			var v = options.UseNonValveUvConversion ? vertex.TexCoord.Y : 1d - vertex.TexCoord.Y;
 
 			var line = string.Format(
 				CultureInfo.InvariantCulture,
 				"  {0} {1:0.000000} {2:0.000000} {3:0.000000} {4:0.000000} {5:0.000000} {6:0.000000} {7:0.000000} {8:0.000000} {9}",
 				primaryBone,
-				position.X, position.Y, position.Z,
-				normal.X, normal.Y, normal.Z,
+				(double)position.X, (double)position.Y, (double)position.Z,
+				(double)normal.X, (double)normal.Y, (double)normal.Z,
 				u, v,
 				boneCount);
 
 			if (boneCount > 0)
 			{
-				line += $" {bw.Bone0} {bw.Weight0:0.000000}";
+				line += FormattableString.Invariant($" {bw.Bone0} {bw.Weight0:0.000000}");
 			}
 			if (boneCount > 1)
 			{
-				line += $" {bw.Bone1} {bw.Weight1:0.000000}";
+				line += FormattableString.Invariant($" {bw.Bone1} {bw.Weight1:0.000000}");
 			}
 			if (boneCount > 2)
 			{
-				line += $" {bw.Bone2} {bw.Weight2:0.000000}";
+				line += FormattableString.Invariant($" {bw.Bone2} {bw.Weight2:0.000000}");
 			}
 
 			return line;

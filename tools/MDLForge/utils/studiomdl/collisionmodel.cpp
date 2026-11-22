@@ -262,6 +262,7 @@ public:
 	int						m_totalVerts;
 	char					m_rootName[128];
 	bool					m_allowConcave;
+	int						m_maxConvexPieces;
 	bool					m_isMassCenterForced;
 	bool					m_noSelfCollisions;
 	Vector					m_massCenterForced;
@@ -350,6 +351,7 @@ CJointedModel::CJointedModel( void )
 	m_defaultInertia = 1.0;
 	m_defaultDrag = -1;
 	m_allowConcave = false;
+	m_maxConvexPieces = 20;
 	m_isMassCenterForced = false;
 	m_noSelfCollisions = false;
 	m_massCenterForced.Init();
@@ -1643,7 +1645,7 @@ int ProcessSingleBody( CJointedModel &joints )
 	// build the collision model of the union of the convex parts
 	if ( elements.Size() )
 	{
-		if ( elements.Size() > 20 )
+		if ( elements.Size() > joints.m_maxConvexPieces )
 		{
 			if ( !g_badCollide )
 			{
@@ -1959,6 +1961,12 @@ void ParseCollisionCommands( CJointedModel &joints )
 		{
 			joints.AllowConcave();
 		}
+		else if ( !stricmp( command, "$maxconvexpieces" ) )
+		{
+			int limit = ReadArgs( args, 1 ) == 1 ? Safe_atoi( args[0] ) : 0;
+			if ( limit > 0 )
+				joints.m_maxConvexPieces = limit;
+		}
 		else if ( !stricmp( command, "$masscenter" ) )
 		{
 			argCount = ReadArgs( args, 3 );
@@ -2147,7 +2155,12 @@ int DoCollisionModel( bool separateJoints )
 
 #if defined( _LINUX ) || defined( OSX )
 	const char *allow = getenv( "MDLFORGE_ALLOW_NATIVE_COLLISION" );
-	if ( !allow || !allow[0] || allow[0] == '0' )
+	bool allowNativeCollision = allow && allow[0] && allow[0] != '0';
+#ifdef OSX
+	if ( !allow || allow[0] != '0' )
+		allowNativeCollision = LoadBundledPhysicsModule() || allowNativeCollision;
+#endif
+	if ( !allowNativeCollision )
 	{
 		// Shipped vphysics builds on Linux/macOS are optimized for runtime and are not reliable for
 		// collision model serialization (CollideSize/CollideWrite) needed to generate .phy.

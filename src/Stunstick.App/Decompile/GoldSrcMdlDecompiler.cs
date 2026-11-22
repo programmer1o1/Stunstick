@@ -177,7 +177,7 @@ internal static class GoldSrcMdlDecompiler
 				Directory.CreateDirectory(bmpFolder);
 			}
 
-			await WriteBmp24Async(bmpPathFileName, (int)texture.Width, (int)texture.Height, indices, palette, cancellationToken);
+			await WriteIndexedBmpAsync(bmpPathFileName, (int)texture.Width, (int)texture.Height, indices, palette, cancellationToken);
 		}
 	}
 
@@ -211,7 +211,7 @@ internal static class GoldSrcMdlDecompiler
 		return string.Concat(segment.Select(ch => invalidChars.Contains(ch) ? '_' : ch));
 	}
 
-	private static async Task WriteBmp24Async(
+	private static async Task WriteIndexedBmpAsync(
 		string pathFileName,
 		int width,
 		int height,
@@ -224,10 +224,11 @@ internal static class GoldSrcMdlDecompiler
 			throw new ArgumentOutOfRangeException(nameof(width), "Texture dimensions must be positive.");
 		}
 
-		var rowBytes = checked(width * 3);
-		var paddedRowBytes = (rowBytes + 3) & ~3;
+		const int paletteEntries = 256;
+		const int pixelOffset = 14 + 40 + paletteEntries * 4;
+		var paddedRowBytes = checked(width + 3) & ~3;
 		var imageBytes = checked(paddedRowBytes * height);
-		var fileSize = 14 + 40 + imageBytes;
+		var fileSize = checked(pixelOffset + imageBytes);
 
 		await using var stream = new FileStream(pathFileName, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 1024 * 64, useAsync: true);
 		using var writer = new BinaryWriter(stream);
@@ -237,42 +238,35 @@ internal static class GoldSrcMdlDecompiler
 		writer.Write(fileSize);
 		writer.Write((ushort)0);
 		writer.Write((ushort)0);
-		writer.Write(14 + 40);
+		writer.Write(pixelOffset);
 
 		// BITMAPINFOHEADER
 		writer.Write(40);
 		writer.Write(width);
 		writer.Write(height);
 		writer.Write((ushort)1);
-		writer.Write((ushort)24);
+		writer.Write((ushort)8);
 		writer.Write(0);
-		writer.Write(imageBytes);
+		writer.Write(0); // BI_RGB permits zero for the image size.
 		writer.Write(0);
 		writer.Write(0);
-		writer.Write(0);
+		writer.Write(paletteEntries);
 		writer.Write(0);
 
-		var paddingBytes = paddedRowBytes - rowBytes;
-		var padding = paddingBytes > 0 ? new byte[paddingBytes] : Array.Empty<byte>();
+		for (var i = 0; i < paletteRgb.Length; i += 3)
+		{
+			writer.Write(paletteRgb[i + 2]); // B
+			writer.Write(paletteRgb[i + 1]); // G
+			writer.Write(paletteRgb[i]); // R
+			writer.Write((byte)0);
+		}
 
+		var padding = new byte[paddedRowBytes - width];
 		for (var y = height - 1; y >= 0; y--)
 		{
 			cancellationToken.ThrowIfCancellationRequested();
-
-			var rowStart = y * width;
-			for (var x = 0; x < width; x++)
-			{
-				var idx = indices[rowStart + x];
-				var paletteIndex = idx * 3;
-				writer.Write(paletteRgb[paletteIndex + 2]); // B
-				writer.Write(paletteRgb[paletteIndex + 1]); // G
-				writer.Write(paletteRgb[paletteIndex]); // R
-			}
-
-			if (paddingBytes > 0)
-			{
-				writer.Write(padding);
-			}
+			writer.Write(indices, y * width, width);
+			writer.Write(padding);
 		}
 
 		await stream.FlushAsync(cancellationToken);

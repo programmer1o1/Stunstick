@@ -1,7 +1,53 @@
+using System.IO;
+
 namespace Stunstick.Desktop;
 
 internal sealed class DesktopSettings
 {
+	public static string SettingsPath => Path.Combine(SettingsDirectory, "desktop-settings.json");
+
+	private static string SettingsDirectory =>
+		Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Stunstick");
+
+	private static string SingleInstancePath => Path.Combine(SettingsDirectory, "single-instance.txt");
+
+	public static bool ReadSingleInstanceEnabled()
+	{
+		try
+		{
+			return !bool.TryParse(File.ReadAllText(SingleInstancePath), out var enabled) || enabled;
+		}
+		catch (IOException)
+		{
+			return true;
+		}
+		catch (UnauthorizedAccessException)
+		{
+			return true;
+		}
+	}
+
+	// Keep startup preferences independent of settings snapshots saved by other windows.
+	public static void WriteSingleInstanceEnabled(bool enabled) =>
+		WriteAtomically(SingleInstancePath, enabled.ToString());
+
+	public static void WriteSettings(string json) => WriteAtomically(SettingsPath, json);
+
+	private static void WriteAtomically(string path, string contents)
+	{
+		Directory.CreateDirectory(SettingsDirectory);
+		var temporaryPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+		try
+		{
+			File.WriteAllText(temporaryPath, contents);
+			File.Move(temporaryPath, path, overwrite: true);
+		}
+		finally
+		{
+			File.Delete(temporaryPath);
+		}
+	}
+
 	public double? WindowWidth { get; set; }
 	public double? WindowHeight { get; set; }
 

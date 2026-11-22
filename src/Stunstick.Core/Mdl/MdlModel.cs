@@ -13,4 +13,8 @@ public sealed record MdlModel(
 	IReadOnlyList<MdlFlexRule> FlexRules,
 	IReadOnlyList<MdlAnimationDesc> AnimationDescs,
 	IReadOnlyList<MdlSequenceDesc> SequenceDescs
-);
+)
+{
+	public float Mass { get; init; }
+	public IReadOnlyList<MdlIkChain> IkChains { get; init; } = Array.Empty<MdlIkChain>();
+}

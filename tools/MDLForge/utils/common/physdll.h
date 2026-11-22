@@ -16,6 +16,9 @@ class IPhysics;
 class IPhysicsCollision;
 
 extern CreateInterfaceFn	GetPhysicsFactory( void );
+#ifdef OSX
+extern bool LoadBundledPhysicsModule();
+#endif
 
 extern "C" {
 #endif

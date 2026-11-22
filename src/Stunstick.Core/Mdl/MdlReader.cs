@@ -5,6 +5,8 @@ namespace Stunstick.Core.Mdl;
 
 public static class MdlReader
 {
+	private const int WideTextureRecordSize = 72;
+
 	public static MdlModel Read(string path, int? versionOverride = null)
 	{
 		if (string.IsNullOrWhiteSpace(path))
@@ -129,18 +131,18 @@ public static class MdlReader
 		var flexRuleCount = reader.ReadInt32();
 		var flexRuleOffset = reader.ReadInt32();
 
-		_ = reader.ReadInt32(); // ikchain count
-		_ = reader.ReadInt32(); // ikchain offset
+		var ikChainCount = reader.ReadInt32();
+		var ikChainOffset = reader.ReadInt32();
 		_ = reader.ReadInt32(); // mouth count
 		_ = reader.ReadInt32(); // mouth offset
-		_ = reader.ReadInt32(); // localposeparam count
-		_ = reader.ReadInt32(); // localposeparam offset
+		var localPoseParameterCount = reader.ReadInt32();
+		var localPoseParameterOffset = reader.ReadInt32();
 		_ = reader.ReadInt32(); // surfaceprop offset
 		_ = reader.ReadInt32(); // keyvalue offset
 		_ = reader.ReadInt32(); // keyvalue size
 		_ = reader.ReadInt32(); // localikautoplaylock count
 		_ = reader.ReadInt32(); // localikautoplaylock offset
-		_ = reader.ReadSingle(); // mass
+		var mass = reader.ReadSingle();
 		_ = reader.ReadInt32(); // contents
 		_ = reader.ReadInt32(); // includemodel count
 		_ = reader.ReadInt32(); // includemodel offset
@@ -187,14 +189,16 @@ public static class MdlReader
 
 		var bones = ReadBones(stream, reader, header);
 		var texturePaths = ReadTexturePaths(stream, reader, header);
-		var textures = ReadTextures(stream, reader, header);
+		var wideGeometryRecords = UsesWideGeometryRecords(reader, header);
+		var textures = ReadTextures(stream, reader, header, wideGeometryRecords);
 		var skinFamilies = ReadSkinFamilies(stream, reader, header);
-		var bodyParts = ReadBodyParts(stream, reader, header);
+		var bodyParts = ReadBodyParts(stream, reader, header, wideGeometryRecords);
 		var flexDescs = ReadFlexDescs(stream, reader, header);
 		var flexControllers = ReadFlexControllers(stream, reader, header);
 		var flexRules = ReadFlexRules(stream, reader, header);
 		var animationDescs = ReadLocalAnimationDescs(stream, reader, header);
-		var sequenceDescs = ReadLocalSequenceDescs(stream, reader, header);
+		var poseParameterNames = ReadPoseParameterNames(stream, reader, localPoseParameterCount, localPoseParameterOffset);
+		var sequenceDescs = ReadLocalSequenceDescs(stream, reader, header, poseParameterNames, bones.Count);
 
 		return new MdlModel(
 			SourcePath: Path.GetFullPath(sourcePath),
@@ -208,7 +212,52 @@ public static class MdlReader
 			FlexControllers: flexControllers,
 			FlexRules: flexRules,
 			AnimationDescs: animationDescs,
-			SequenceDescs: sequenceDescs);
+			SequenceDescs: sequenceDescs)
+		{
+			Mass = mass,
+			IkChains = ReadIkChains(stream, reader, ikChainCount, ikChainOffset, bones.Count)
+		};
+	}
+
+	private static IReadOnlyList<MdlIkChain> ReadIkChains(
+		Stream stream, BinaryReader reader, int count, int offset, int boneCount)
+	{
+		const int chainSize = 16;
+		const int linkSize = 28;
+		if (count <= 0 || offset <= 0 || offset + (long)count * chainSize > stream.Length)
+		{
+			return Array.Empty<MdlIkChain>();
+		}
+
+		var chains = new List<MdlIkChain>();
+		for (var index = 0; index < count; index++)
+		{
+			var start = offset + (long)index * chainSize;
+			stream.Seek(start, SeekOrigin.Begin);
+			var nameOffset = reader.ReadInt32();
+			_ = reader.ReadInt32(); // link type
+			var linkCount = reader.ReadInt32();
+			var linkOffset = reader.ReadInt32();
+			var linksStart = start + linkOffset;
+			if (nameOffset <= 0 || start + nameOffset >= stream.Length || linkOffset <= 0 ||
+				linkCount <= 0 || linksStart + (long)linkCount * linkSize > stream.Length)
+			{
+				continue;
+			}
+
+			var name = ReadNullTerminatedStringAt(stream, start + nameOffset, maxBytes: 256).Trim();
+			stream.Seek(linksStart + sizeof(int), SeekOrigin.Begin);
+			var knee = new Vector3(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
+			stream.Seek(linksStart + (long)(linkCount - 1) * linkSize, SeekOrigin.Begin);
+			var endBone = reader.ReadInt32();
+			if (!string.IsNullOrEmpty(name) && (uint)endBone < (uint)boneCount &&
+				float.IsFinite(knee.X) && float.IsFinite(knee.Y) && float.IsFinite(knee.Z))
+			{
+				chains.Add(new MdlIkChain(name, endBone, knee));
+			}
+		}
+
+		return chains;
 	}
 
 	private static bool IsSupportedVersion(int version)
@@ -557,10 +606,61 @@ public static class MdlReader
 				RotationScale: rotationScale,
 				PoseToBone: poseToBone,
 				PhysicsBoneIndex: physicsBoneIndex,
-				Flags: flags));
+				Flags: flags)
+			{
+				Jiggle = ReadJiggleBone(reader, boneStart, boneSize.Value, header.Version)
+			});
 		}
 
 		return result;
+	}
+
+	private static MdlJiggleBone? ReadJiggleBone(BinaryReader reader, long boneStart, int boneSize, int version)
+	{
+		const int jiggleRuleType = 5;
+		const int baseRuleBytes = 30 * sizeof(int);
+		const int boingBytes = 5 * sizeof(float);
+		if (boneSize < 176)
+		{
+			return null;
+		}
+
+		var stream = reader.BaseStream;
+		stream.Position = boneStart + (version >= 53 && boneSize >= 244 ? 188 : 164);
+		if (reader.ReadInt32() != jiggleRuleType)
+		{
+			return null;
+		}
+		var offset = reader.ReadInt32();
+		var start = boneStart + offset;
+		if (offset <= 0 || start + baseRuleBytes > stream.Length)
+		{
+			return null;
+		}
+
+		stream.Position = start;
+		var flags = (MdlJiggleFlags)reader.ReadInt32();
+		var finite = true;
+		float ReadFloat()
+		{
+			var value = reader.ReadSingle();
+			finite &= float.IsFinite(value);
+			return value;
+		}
+		MdlJiggleConstraint ReadConstraint(bool angular) => new(ReadFloat(), ReadFloat(), ReadFloat(), angular ? ReadFloat() : 0);
+		var jiggle = new MdlJiggleBone(flags, ReadFloat(), ReadFloat(),
+			ReadFloat(), ReadFloat(), ReadFloat(), ReadFloat(), ReadFloat(), ReadFloat(), ReadFloat(),
+			ReadConstraint(true), ReadConstraint(true), ReadFloat(), ReadFloat(), ReadFloat(),
+			ReadConstraint(false), ReadConstraint(false), ReadConstraint(false), null);
+		if (flags.HasFlag(MdlJiggleFlags.Boing))
+		{
+			if (stream.Position + boingBytes > stream.Length)
+			{
+				return null;
+			}
+			jiggle = jiggle with { Boing = new MdlJiggleBoing(ReadFloat(), ReadFloat(), ReadFloat(), ReadFloat(), ReadFloat()) };
+		}
+		return finite ? jiggle : null;
 	}
 
 	private static IReadOnlyList<string> ReadTexturePaths(Stream stream, BinaryReader reader, MdlHeader header)
@@ -599,7 +699,38 @@ public static class MdlReader
 		return result;
 	}
 
-	private static IReadOnlyList<MdlTexture> ReadTextures(Stream stream, BinaryReader reader, MdlHeader header)
+	private static bool UsesWideGeometryRecords(BinaryReader reader, MdlHeader header)
+	{
+		// Native 64-bit MDLForge writes pointer-sized fields in the texture, model, and mesh records.
+		// Its texture directory offsets immediately follow the texture records, even with no directories.
+		var textureTableEnd = (long)header.TextureOffset + (long)header.TextureCount * WideTextureRecordSize;
+		var stream = reader.BaseStream;
+		if (header.TextureCount <= 0 || header.TextureOffset <= 0 || textureTableEnd != header.TexturePathOffset ||
+			textureTableEnd > stream.Length)
+		{
+			return false;
+		}
+
+		for (var index = 0; index < header.TextureCount; index++)
+		{
+			var record = (long)header.TextureOffset + (long)index * WideTextureRecordSize;
+			stream.Position = record;
+			var name = record + reader.ReadInt32();
+			if (name < textureTableEnd || name >= stream.Length)
+			{
+				return false;
+			}
+			stream.Position = name;
+			var firstByte = reader.ReadByte();
+			if (firstByte < 32 || firstByte == 127)
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	private static IReadOnlyList<MdlTexture> ReadTextures(Stream stream, BinaryReader reader, MdlHeader header, bool wideGeometryRecords)
 	{
 		if (header.TextureCount <= 0 || header.TextureOffset <= 0)
 		{
@@ -611,7 +742,7 @@ public static class MdlReader
 			return Array.Empty<MdlTexture>();
 		}
 
-		const int textureStructSizeBytes = 64;
+		var textureStructSizeBytes = wideGeometryRecords ? WideTextureRecordSize : 64;
 		var requiredBytes = (long)header.TextureCount * textureStructSizeBytes;
 		if ((long)header.TextureOffset + requiredBytes > stream.Length)
 		{
@@ -627,12 +758,6 @@ public static class MdlReader
 			stream.Seek(textureStart, SeekOrigin.Begin);
 
 			var nameOffset = reader.ReadInt32();
-			_ = reader.ReadInt32(); // flags
-			_ = reader.ReadInt32(); // used
-			_ = reader.ReadInt32(); // unused1
-			_ = reader.ReadInt32(); // materialP
-			_ = reader.ReadInt32(); // clientMaterialP
-			SkipBytes(reader, 10 * sizeof(int)); // unused[10]
 
 			var pathFileName = string.Empty;
 			if (nameOffset > 0)
@@ -648,7 +773,7 @@ public static class MdlReader
 		return textures;
 	}
 
-	private static IReadOnlyList<MdlBodyPart> ReadBodyParts(Stream stream, BinaryReader reader, MdlHeader header)
+	private static IReadOnlyList<MdlBodyPart> ReadBodyParts(Stream stream, BinaryReader reader, MdlHeader header, bool wideGeometryRecords)
 	{
 		if (header.BodyPartCount <= 0 || header.BodyPartOffset <= 0)
 		{
@@ -686,7 +811,7 @@ public static class MdlReader
 				bodyPartName = ReadNullTerminatedStringAt(stream, bodyPartStart + nameOffset, maxBytes: 256).Trim();
 			}
 
-			var models = ReadSubModels(stream, reader, bodyPartStart, modelCount, modelOffset);
+			var models = ReadSubModels(stream, reader, bodyPartStart, modelCount, modelOffset, wideGeometryRecords);
 			result.Add(new MdlBodyPart(
 				Index: bodyPartIndex,
 				Name: bodyPartName,
@@ -701,7 +826,8 @@ public static class MdlReader
 		BinaryReader reader,
 		long bodyPartStart,
 		int modelCount,
-		int modelOffset)
+		int modelOffset,
+		bool wideGeometryRecords)
 	{
 		if (modelCount <= 0 || modelOffset <= 0)
 		{
@@ -714,7 +840,7 @@ public static class MdlReader
 			return Array.Empty<MdlSubModel>();
 		}
 
-		const int modelStructSizeBytes = 148;
+		var modelStructSizeBytes = wideGeometryRecords ? 160 : 148;
 		var requiredBytes = (long)modelCount * modelStructSizeBytes;
 		if (modelsStart + requiredBytes > stream.Length)
 		{
@@ -734,19 +860,62 @@ public static class MdlReader
 			var meshOffset = reader.ReadInt32();
 			var vertexCount = reader.ReadInt32();
 
-			SkipBytes(reader, 6 * sizeof(int)); // vertexindex, tangentsindex, numattachments, attachmentindex, numeyeballs, eyeballindex
-			SkipBytes(reader, 2 * sizeof(int)); // vertexdata pointers
-			SkipBytes(reader, 8 * sizeof(int)); // unused[8]
+			SkipBytes(reader, 4 * sizeof(int)); // vertexindex, tangentsindex, numattachments, attachmentindex
+			var eyeballCount = reader.ReadInt32();
+			var eyeballOffset = reader.ReadInt32();
 
-			var meshes = ReadMeshes(stream, reader, modelStart, meshCount, meshOffset);
+			var meshes = ReadMeshes(stream, reader, modelStart, meshCount, meshOffset, wideGeometryRecords);
 			result.Add(new MdlSubModel(
 				Index: modelIndex,
 				Name: name,
 				VertexCount: vertexCount,
-				Meshes: meshes));
+				Meshes: meshes)
+			{
+				Eyeballs = ReadEyeballs(stream, reader, modelStart, eyeballCount, eyeballOffset)
+			});
 		}
 
 		return result;
+	}
+
+	private static IReadOnlyList<MdlEyeball> ReadEyeballs(
+		Stream stream, BinaryReader reader, long modelStart, int count, int offset)
+	{
+		const int eyeballSize = 172;
+		var start = modelStart + offset;
+		if (count <= 0 || offset <= 0 || start + (long)count * eyeballSize > stream.Length)
+		{
+			return Array.Empty<MdlEyeball>();
+		}
+
+		var eyeballs = new List<MdlEyeball>();
+		for (var index = 0; index < count; index++)
+		{
+			var eyeStart = start + (long)index * eyeballSize;
+			stream.Seek(eyeStart, SeekOrigin.Begin);
+			var nameOffset = reader.ReadInt32();
+			var boneIndex = reader.ReadInt32();
+			var origin = new Vector3(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
+			var zOffset = reader.ReadSingle();
+			var radius = reader.ReadSingle();
+			stream.Seek(eyeStart + 60, SeekOrigin.Begin); // iris_scale
+			var irisScale = reader.ReadSingle();
+			_ = reader.ReadInt32(); // glint material
+			var upperLowerer = reader.ReadInt32();
+			SkipBytes(reader, 2 * sizeof(int));
+			var lowerLowerer = reader.ReadInt32();
+			SkipBytes(reader, 2 * sizeof(int));
+			var upperTargets = new Vector3(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
+			var lowerTargets = new Vector3(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
+			var upperLid = new MdlEyelid(reader.ReadInt32(), upperLowerer, upperTargets);
+			var lowerLid = new MdlEyelid(reader.ReadInt32(), lowerLowerer, lowerTargets);
+			var name = nameOffset > 0 && eyeStart + nameOffset < stream.Length
+				? ReadNullTerminatedStringAt(stream, eyeStart + nameOffset, maxBytes: 256).Trim()
+				: string.Empty;
+			eyeballs.Add(new MdlEyeball(index, name, boneIndex, origin, zOffset, radius, irisScale, upperLid, lowerLid));
+		}
+
+		return eyeballs;
 	}
 
 	private static IReadOnlyList<MdlMesh> ReadMeshes(
@@ -754,7 +923,8 @@ public static class MdlReader
 		BinaryReader reader,
 		long modelStart,
 		int meshCount,
-		int meshOffset)
+		int meshOffset,
+		bool wideGeometryRecords)
 	{
 		if (meshCount <= 0 || meshOffset <= 0)
 		{
@@ -767,7 +937,7 @@ public static class MdlReader
 			return Array.Empty<MdlMesh>();
 		}
 
-		const int meshStructSizeBytes = 116;
+		var meshStructSizeBytes = wideGeometryRecords ? 120 : 116;
 		var requiredBytes = (long)meshCount * meshStructSizeBytes;
 		if (meshesStart + requiredBytes > stream.Length)
 		{
@@ -787,9 +957,11 @@ public static class MdlReader
 			var flexCount = reader.ReadInt32();
 			var flexOffset = reader.ReadInt32();
 
-			SkipBytes(reader, 3 * sizeof(int)); // materialtype, materialparam, meshid
+			var materialType = reader.ReadInt32();
+			var materialParameter = reader.ReadInt32();
+			_ = reader.ReadInt32(); // meshid
 			SkipBytes(reader, 3 * sizeof(float)); // center (Vector)
-			SkipBytes(reader, sizeof(int)); // vertexdata.modelvertexdata (runtime pointer)
+			SkipBytes(reader, wideGeometryRecords ? sizeof(long) : sizeof(int)); // vertexdata.modelvertexdata
 			var lodVertexCount = new int[8];
 			for (var i = 0; i < lodVertexCount.Length; i++)
 			{
@@ -804,7 +976,10 @@ public static class MdlReader
 				VertexCount: vertexCount,
 				VertexIndexStart: vertexIndexStart,
 				Flexes: flexes,
-				LodVertexCount: lodVertexCount));
+				LodVertexCount: lodVertexCount)
+			{
+				EyeballIndex = materialType == 1 && materialParameter >= 0 ? materialParameter : null
+			});
 		}
 
 		return meshes;
@@ -1044,7 +1219,30 @@ public static class MdlReader
 		return movements;
 	}
 
-	private static IReadOnlyList<MdlSequenceDesc> ReadLocalSequenceDescs(Stream stream, BinaryReader reader, MdlHeader header)
+	private static string[] ReadPoseParameterNames(Stream stream, BinaryReader reader, int count, int offset)
+	{
+		const int descriptorSize = 20;
+		if (count <= 0 || offset <= 0 || offset + (long)count * descriptorSize > stream.Length)
+		{
+			return Array.Empty<string>();
+		}
+
+		var names = new string[count];
+		for (var index = 0; index < count; index++)
+		{
+			var descriptorStart = offset + (long)index * descriptorSize;
+			stream.Seek(descriptorStart, SeekOrigin.Begin);
+			var nameOffset = reader.ReadInt32();
+			names[index] = nameOffset > 0 && descriptorStart + nameOffset < stream.Length
+				? ReadNullTerminatedStringAt(stream, descriptorStart + nameOffset, maxBytes: 512).Trim()
+				: string.Empty;
+		}
+
+		return names;
+	}
+
+	private static IReadOnlyList<MdlSequenceDesc> ReadLocalSequenceDescs(
+		Stream stream, BinaryReader reader, MdlHeader header, IReadOnlyList<string> poseParameterNames, int boneCount)
 	{
 		if (header.LocalSequenceCount <= 0 || header.LocalSequenceOffset <= 0)
 		{
@@ -1057,6 +1255,7 @@ public static class MdlReader
 		}
 
 		const int sequenceDescSizeBytes = 212;
+		const int weightListOffsetInSequence = 156;
 		var requiredBytes = (long)header.LocalSequenceCount * sequenceDescSizeBytes;
 		if ((long)header.LocalSequenceOffset + requiredBytes > stream.Length)
 		{
@@ -1084,6 +1283,23 @@ public static class MdlReader
 			_ = reader.ReadInt32(); // movementindex
 			var groupSize0 = reader.ReadInt32();
 			var groupSize1 = reader.ReadInt32();
+			var parameterIndexes = new[] { reader.ReadInt32(), reader.ReadInt32() };
+			var parameterStarts = new[] { reader.ReadSingle(), reader.ReadSingle() };
+			var parameterEnds = new[] { reader.ReadSingle(), reader.ReadSingle() };
+			stream.Seek(seqStart + weightListOffsetInSequence, SeekOrigin.Begin);
+			var weightListOffset = reader.ReadInt32();
+			var blendAxes = new List<MdlSequenceBlendAxis>(capacity: 2);
+			for (var axis = 0; axis < parameterIndexes.Length; axis++)
+			{
+				var parameterIndex = parameterIndexes[axis];
+				if ((uint)parameterIndex < (uint)poseParameterNames.Count &&
+					!string.IsNullOrWhiteSpace(poseParameterNames[parameterIndex]) &&
+					float.IsFinite(parameterStarts[axis]) && float.IsFinite(parameterEnds[axis]))
+				{
+					blendAxes.Add(new MdlSequenceBlendAxis(
+						poseParameterNames[parameterIndex], parameterStarts[axis], parameterEnds[axis]));
+				}
+			}
 
 			var name = string.Empty;
 			if (nameOffset > 0)
@@ -1092,16 +1308,16 @@ public static class MdlReader
 			}
 
 			var animIndexes = Array.Empty<short>();
-			var animIndexCount = groupSize0 * groupSize1;
-			if (animIndexCount > 0 && animIndexOffset > 0)
+			var animIndexCount = (long)groupSize0 * groupSize1;
+			if (groupSize0 > 0 && groupSize1 > 0 && animIndexCount <= int.MaxValue && animIndexOffset > 0)
 			{
 				var animIndexesStart = seqStart + animIndexOffset;
 				var bytesNeeded = (long)animIndexCount * sizeof(short);
 				if (animIndexesStart > 0 && animIndexesStart + bytesNeeded <= stream.Length)
 				{
 					stream.Seek(animIndexesStart, SeekOrigin.Begin);
-					var temp = new short[animIndexCount];
-					for (var i = 0; i < animIndexCount; i++)
+					var temp = new short[(int)animIndexCount];
+					for (var i = 0; i < temp.Length; i++)
 					{
 						temp[i] = reader.ReadInt16();
 					}
@@ -1118,10 +1334,36 @@ public static class MdlReader
 				GroupSize0: groupSize0,
 				GroupSize1: groupSize1,
 				AnimIndexOffset: animIndexOffset,
-				AnimDescIndexes: animIndexes));
+				AnimDescIndexes: animIndexes)
+			{
+				BlendAxes = blendAxes,
+				BoneWeights = ReadSequenceBoneWeights(reader, seqStart, weightListOffset, boneCount)
+			});
 		}
 
 		return sequences;
+	}
+
+	private static IReadOnlyList<float> ReadSequenceBoneWeights(BinaryReader reader, long sequenceStart, int relativeOffset, int boneCount)
+	{
+		var stream = reader.BaseStream;
+		var start = sequenceStart + relativeOffset;
+		if (relativeOffset == 0 || boneCount == 0 || start < 0 || start + (long)boneCount * sizeof(float) > stream.Length)
+		{
+			return Array.Empty<float>();
+		}
+
+		stream.Seek(start, SeekOrigin.Begin);
+		var weights = new float[boneCount];
+		for (var i = 0; i < weights.Length; i++)
+		{
+			weights[i] = reader.ReadSingle();
+			if (!float.IsFinite(weights[i]))
+			{
+				return Array.Empty<float>();
+			}
+		}
+		return weights;
 	}
 
 	private static int? DetermineBoneStructSize(

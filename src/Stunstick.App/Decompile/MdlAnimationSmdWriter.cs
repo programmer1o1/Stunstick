@@ -485,7 +485,6 @@ internal static class MdlAnimationSmdWriter
 						timePrefix,
 						format,
 						model.Bones,
-						model.Header.Version,
 						animDesc,
 						sections,
 						animBlocks,
@@ -517,7 +516,7 @@ internal static class MdlAnimationSmdWriter
 
 							var position = CalcBonePosition(localFrameIndex, bone, anim);
 							var rotation = CalcBoneRotation(localFrameIndex, bone, anim);
-							ApplyRootBoneAdjustments(model.Header.Version, frameIndex, bone, animDesc.Movements, ref position, ref rotation);
+							ApplyRootBoneAdjustments(frameIndex, bone, animDesc.Movements, ref position, ref rotation);
 							position = NormalizeSignedZeros(position);
 							rotation = NormalizeSignedZeros(rotation);
 
@@ -694,7 +693,6 @@ internal static class MdlAnimationSmdWriter
 			string timePrefix,
 			IFormatProvider format,
 			IReadOnlyList<MdlBone> bones,
-			int modelVersion,
 			MdlAnimationDesc animDesc,
 			IReadOnlyList<AnimSection> sections,
 			IReadOnlyList<AnimBlock> animBlocks,
@@ -874,7 +872,7 @@ internal static class MdlAnimationSmdWriter
 					var boneIndex = bone.Index;
 					var position = (uint)boneIndex < (uint)positionsByBoneIndex.Length ? positionsByBoneIndex[boneIndex] : bone.Position;
 					var rotation = (uint)boneIndex < (uint)rotationsByBoneIndex.Length ? rotationsByBoneIndex[boneIndex] : bone.RotationRadians;
-					ApplyRootBoneAdjustments(modelVersion, frameIndex, bone, animDesc.Movements, ref position, ref rotation);
+				ApplyRootBoneAdjustments(frameIndex, bone, animDesc.Movements, ref position, ref rotation);
 					position = NormalizeSignedZeros(position);
 					rotation = NormalizeSignedZeros(rotation);
 
@@ -1311,13 +1309,7 @@ internal static class MdlAnimationSmdWriter
 		return (byte)(((ushort)raw >> 8) & 0xFF);
 	}
 
-	// Crowbar rotates the root bone -90° around Z when converting coordinates. Our
-	// loader already aligns the root orientation, so applying that extra offset
-	// would double-rotate and lose the expected yaw. Keep zero here to preserve
-	// the animation's stored root yaw.
-	private const float RootRotationOffsetRadians = 0f;
-
-	private static void ApplyRootBoneAdjustments(int modelVersion, int frameIndex, MdlBone bone, IReadOnlyList<MdlMovement> movements, ref Vector3 position, ref Vector3 rotation)
+	private static void ApplyRootBoneAdjustments(int frameIndex, MdlBone bone, IReadOnlyList<MdlMovement> movements, ref Vector3 position, ref Vector3 rotation)
 	{
 		if (bone.ParentIndex != -1)
 		{
@@ -1331,15 +1323,9 @@ internal static class MdlAnimationSmdWriter
 			rotation = new Vector3(rotation.X, rotation.Y, rotation.Z + deltaYawRadians);
 		}
 
-		if (modelVersion <= 47)
-		{
-			position = new Vector3(position.X, position.Y, position.Z);
-		}
-		else
-		{
-			position = new Vector3(position.Y, -position.X, position.Z);
-		}
-		rotation = new Vector3(rotation.X, rotation.Y, rotation.Z + RootRotationOffsetRadians);
+		// StudioMDL applies +90° about Z to animation roots when it compiles an SMD.
+		position = new Vector3(position.Y, -position.X, position.Z);
+		rotation = new Vector3(rotation.X, rotation.Y, rotation.Z - MathF.PI / 2);
 	}
 
 	private static Vector3 NormalizeSignedZeros(Vector3 value)

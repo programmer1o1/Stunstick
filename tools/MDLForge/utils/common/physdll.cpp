@@ -6,6 +6,10 @@
 //
 //=============================================================================//
 #include <stdio.h>
+#ifdef OSX
+#include <mach-o/dyld.h>
+#include <limits.h>
+#endif
 #ifdef _LINUX
 #include <dlfcn.h>
 #include <stdlib.h>
@@ -44,6 +48,24 @@ static bool TryLoadPhysicsModule( const char *pModulePath )
 	return pPhysicsModule != NULL;
 #endif
 }
+
+#ifdef OSX
+bool LoadBundledPhysicsModule()
+{
+	if ( pPhysicsModule )
+		return true;
+
+	char executablePath[PATH_MAX];
+	uint32_t pathSize = sizeof( executablePath );
+	if ( _NSGetExecutablePath( executablePath, &pathSize ) != 0 )
+		return false;
+
+	Q_StripFilename( executablePath );
+	char modulePath[PATH_MAX];
+	int length = snprintf( modulePath, sizeof( modulePath ), "%s/libvphysics.dylib", executablePath );
+	return length > 0 && static_cast<size_t>( length ) < sizeof( modulePath ) && TryLoadPhysicsModule( modulePath );
+}
+#endif
 
 #ifdef _LINUX
 static void PrependToLdLibraryPath( const char *pDirectory )

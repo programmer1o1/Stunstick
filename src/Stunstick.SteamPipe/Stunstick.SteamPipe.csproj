@@ -2,19 +2,20 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
-    <PlatformTarget>x64</PlatformTarget>
     <ImplicitUsings>disable</ImplicitUsings>
     <AssemblyName>Stunstick.SteamPipe</AssemblyName>
     <Product>Stunstick</Product>
     <Nullable>disable</Nullable>
     <NoWarn>$(NoWarn);CS8600;CS8601;CS8603;CS8604;CS8605;CS8618;CS8625;CS8765;CS8632</NoWarn>
+    <SteamPipeWindows Condition="$([System.String]::Copy('$(RuntimeIdentifier)').StartsWith('win-')) Or ('$(RuntimeIdentifier)' == '' And $([MSBuild]::IsOSPlatform('Windows')))">true</SteamPipeWindows>
+    <SteamPipeMac Condition="$([System.String]::Copy('$(RuntimeIdentifier)').StartsWith('osx-')) Or ('$(RuntimeIdentifier)' == '' And $([MSBuild]::IsOSPlatform('OSX')))">true</SteamPipeMac>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(OS)' == 'Windows_NT'">
+  <PropertyGroup Condition="'$(SteamPipeWindows)' == 'true'">
     <DefineConstants>$(DefineConstants);STEAMWORKS_WIN;STEAMWORKS_X64</DefineConstants>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(OS)' != 'Windows_NT'">
+  <PropertyGroup Condition="'$(SteamPipeWindows)' != 'true'">
     <DefineConstants>$(DefineConstants);STEAMWORKS_LIN_OSX;STEAMWORKS_X64</DefineConstants>
   </PropertyGroup>
 
@@ -22,14 +23,16 @@
     <Compile Include="..\\ThirdParty\\Steamworks.NET\\com.rlabrecque.steamworks.net\\Runtime\\**\\*.cs" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(OS)' == 'Windows_NT'">
+  <ItemGroup Condition="'$(SteamPipeWindows)' == 'true'">
     <None Include="..\\ThirdParty\\Steamworks.NET\\com.rlabrecque.steamworks.net\\Plugins\\steam_api64.dll" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(OS)' != 'Windows_NT'">
+  <ItemGroup Condition="'$(SteamPipeWindows)' != 'true' And '$(SteamPipeMac)' != 'true'">
     <None Include="..\\ThirdParty\\Steamworks.NET\\com.rlabrecque.steamworks.net\\Plugins\\libsteam_api.so" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="..\\ThirdParty\\Steamworks.NET\\com.rlabrecque.steamworks.net\\Plugins\\steam_api.bundle\\**\\*">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(SteamPipeMac)' == 'true'">
+    <None Include="..\\ThirdParty\\Steamworks.NET\\com.rlabrecque.steamworks.net\\Plugins\\steam_api.bundle\\Contents\\MacOS\\libsteam_api.dylib"
+          Link="libsteam_api.dylib" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

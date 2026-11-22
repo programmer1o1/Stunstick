@@ -13,6 +13,11 @@ public static class MdlConstants
 	public const int StudioHdrFlagsHasShadowLod = 1 << 6;
 	public const int StudioHdrFlagsUseShadowlodMaterials = 1 << 8;
 
+	// mstudioseqdesc_t flags
+	public const int StudioSequenceLooping = 1 << 0;
+	public const int StudioSequenceDelta = 1 << 2;
+	public const int StudioSequencePost = 1 << 4;
+
 	// Bone flags (studio.h)
 	public const int BoneUsedByHitbox = 0x00000100;
 	public const int BoneUsedByAttachment = 0x00000200;

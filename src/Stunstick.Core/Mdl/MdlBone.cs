@@ -13,4 +13,7 @@ public sealed record MdlBone(
 	Matrix4x4 PoseToBone,
 	int PhysicsBoneIndex,
 	int Flags
-);
+)
+{
+	public MdlJiggleBone? Jiggle { get; init; }
+}

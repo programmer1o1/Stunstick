@@ -61,7 +61,7 @@ internal static class MdlProceduralBonesVrdWriter
 			return null;
 		}
 
-		if (!TryGetProceduralRuleFieldOffsets(boneSize.Value, out var procTypeOffset, out var procIndexOffset))
+		if (!TryGetProceduralRuleFieldOffsets(boneSize.Value, model.Header.Version, out var procTypeOffset, out var procIndexOffset))
 		{
 			return null;
 		}
@@ -123,7 +123,7 @@ internal static class MdlProceduralBonesVrdWriter
 		}
 
 		var text = textWriter.ToString();
-		await File.WriteAllTextAsync(vrdPathFileName, text, Encoding.UTF8, cancellationToken);
+		await File.WriteAllTextAsync(vrdPathFileName, text, cancellationToken);
 		return vrdFileName;
 	}
 
@@ -234,10 +234,10 @@ internal static class MdlProceduralBonesVrdWriter
 		return null;
 	}
 
-	private static bool TryGetProceduralRuleFieldOffsets(int boneStructSizeBytes, out int procTypeOffset, out int procIndexOffset)
+	private static bool TryGetProceduralRuleFieldOffsets(int boneStructSizeBytes, int version, out int procTypeOffset, out int procIndexOffset)
 	{
 		// v53-like layout (adds extra vectors before poseToBone).
-		if (boneStructSizeBytes >= 244)
+		if (version >= 53 && boneStructSizeBytes >= 244)
 		{
 			procTypeOffset = 188;
 			procIndexOffset = 192;
@@ -459,7 +459,7 @@ internal static class MdlProceduralBonesVrdWriter
 				toleranceDeg,
 				triggerEuler.X * degrees, triggerEuler.Y * degrees, triggerEuler.Z * degrees,
 				quatEuler.X * degrees, quatEuler.Y * degrees, quatEuler.Z * degrees,
-				trigger.Pos.X, trigger.Pos.Y, trigger.Pos.Z));
+				(double)trigger.Pos.X, (double)trigger.Pos.Y, (double)trigger.Pos.Z));
 		}
 
 		_ = options; // reserved for future formatting toggles
@@ -512,9 +512,9 @@ internal static class MdlProceduralBonesVrdWriter
 		var format = CultureInfo.InvariantCulture;
 
 		writer.WriteLine($"<aimconstraint> {boneName} {parentBoneName} {aimName}");
-		writer.WriteLine(string.Format(format, "<aimvector> {0:0.######} {1:0.######} {2:0.######}", data.Aim.X, data.Aim.Y, data.Aim.Z));
-		writer.WriteLine(string.Format(format, "<upvector> {0:0.######} {1:0.######} {2:0.######}", data.Up.X, data.Up.Y, data.Up.Z));
-		writer.WriteLine(string.Format(format, "<basepos> {0:0.######} {1:0.######} {2:0.######}", data.BasePos.X, data.BasePos.Y, data.BasePos.Z));
+		writer.WriteLine(string.Format(format, "<aimvector> {0:0.######} {1:0.######} {2:0.######}", (double)data.Aim.X, (double)data.Aim.Y, (double)data.Aim.Z));
+		writer.WriteLine(string.Format(format, "<upvector> {0:0.######} {1:0.######} {2:0.######}", (double)data.Up.X, (double)data.Up.Y, (double)data.Up.Z));
+		writer.WriteLine(string.Format(format, "<basepos> {0:0.######} {1:0.######} {2:0.######}", (double)data.BasePos.X, (double)data.BasePos.Y, (double)data.BasePos.Z));
 
 		return true;
 	}
@@ -535,7 +535,7 @@ internal static class MdlProceduralBonesVrdWriter
 		return dot + 1 < name.Length ? name[(dot + 1)..] : string.Empty;
 	}
 
-	private static Vector3 ToEulerAngles(Quaternion q)
+	private static (double X, double Y, double Z) ToEulerAngles(Quaternion q)
 	{
 		// Mirrors Crowbar MathModule.ToEulerAngles(): Eul_FromQuat(q, 0, 1, 2, 0, Even, No, S)
 		var n = (double)q.X * q.X + (double)q.Y * q.Y + (double)q.Z * q.Z + (double)q.W * q.W;
@@ -583,6 +583,6 @@ internal static class MdlProceduralBonesVrdWriter
 			z = 0.0;
 		}
 
-		return new Vector3((float)x, (float)y, (float)z);
+		return (x, y, z);
 	}
 }

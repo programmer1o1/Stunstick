@@ -977,7 +977,7 @@ EXTERN	s_bodypart_t g_bodypart[MAXSTUDIOBODYPARTS];
 
 
 #define MAXWEIGHTLISTS	32
-#define MAXWEIGHTSPERLIST	16
+#define MAXWEIGHTSPERLIST	MAXSTUDIOBONES
 
 struct s_weightlist_t
 {
@@ -1079,6 +1079,16 @@ struct s_aimatbone_t
 EXTERN int g_numaimatbones;
 EXTERN s_aimatbone_t g_aimatbones[MAXSTUDIOBONES];
 EXTERN int g_aimatbonemap[MAXSTUDIOBONES]; // map used aimatpbone's to source aimatpbone's (may be optimized out)
+
+
+// $jigglebone
+struct s_jigglebone_t
+{
+	char				bonename[MAXSTUDIONAME];
+	mstudiojigglebone_t	data;
+};
+EXTERN int g_numjigglebones;
+EXTERN s_jigglebone_t g_jigglebones[MAXSTUDIOBONES];
 
 
 struct s_forcedhierarchy_t

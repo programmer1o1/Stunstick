@@ -7,4 +7,7 @@ public sealed record MdlMesh(
 	int VertexIndexStart,
 	IReadOnlyList<MdlFlex> Flexes,
 	IReadOnlyList<int> LodVertexCount
-);
+)
+{
+	public int? EyeballIndex { get; init; }
+}

@@ -24,6 +24,8 @@ jobs:
             rid: win-x64
           - os: macos-latest
             rid: osx-x64
+          - os: macos-latest
+            rid: osx-arm64
 
     steps:
       - name: Checkout
@@ -39,6 +41,10 @@ jobs:
 
       - name: Test
         run: dotnet test Stunstick.CrossPlatform.sln -c Release --no-restore
+
+      - name: Build bundled StudioMDL and vphysics on macOS
+        if: runner.os == 'macOS'
+        run: bash scripts/toolchain/build_studiomdl.sh
 
       - name: Publish (CLI + Desktop + SteamPipe)
         shell: pwsh
@@ -75,6 +81,9 @@ jobs:
 
           # Help resources (local fallback before opening GitHub URLs).
           Copy-Item -Force README.md, CROSS_PLATFORM.md, parity.md, FAQ.md, LICENSE.txt out/desktop/
+          New-Item -ItemType Directory -Force out/desktop/docs/images, out/desktop/tools/studiomdl | Out-Null
+          Copy-Item -Force docs/images/* out/desktop/docs/images/
+          Copy-Item -Force tools/studiomdl/README.md out/desktop/tools/studiomdl/
 
           $root = "staging/Stunstick-$tag-$rid"
           if (Test-Path $root) { Remove-Item -Recurse -Force $root }
@@ -85,7 +94,24 @@ jobs:
 
           $zipPath = "dist/Stunstick-$tag-$rid.zip"
           if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
-          Compress-Archive -Path $root -DestinationPath $zipPath
+          if ($IsMacOS) {
+            foreach ($app in @("cli", "desktop")) {
+              $toolDir = "$root/$app/tools/studiomdl/bin"
+              foreach ($file in @("studiomdl", "libvphysics.dylib", "vphysics-LICENSE.txt")) {
+                if (-not (Test-Path "$toolDir/$file" -PathType Leaf)) { throw "Missing $toolDir/$file" }
+              }
+              & /bin/test -x "$toolDir/studiomdl"
+              if ($LASTEXITCODE -ne 0) { throw "StudioMDL is not executable in $app" }
+              & /usr/bin/lipo -verify_arch x86_64 "$toolDir/studiomdl"
+              if ($LASTEXITCODE -ne 0) { throw "Invalid StudioMDL architecture in $app" }
+              & /usr/bin/lipo -verify_arch x86_64 "$toolDir/libvphysics.dylib"
+              if ($LASTEXITCODE -ne 0) { throw "Invalid vphysics architecture in $app" }
+            }
+            & /usr/bin/ditto -c -k --keepParent $root $zipPath
+            if ($LASTEXITCODE -ne 0) { throw "Could not create the macOS release archive" }
+          } else {
+            Compress-Archive -Path $root -DestinationPath $zipPath
+          }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

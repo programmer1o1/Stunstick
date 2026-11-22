@@ -16,7 +16,11 @@ public static class VdfParser
 		return Parse(text);
 	}
 
-	public static VdfObject Parse(string text)
+	public static VdfObject Parse(string text) => Parse(text, preserveEntries: false);
+
+	internal static VdfObject ParseWithRepeatedKeys(string text) => Parse(text, preserveEntries: true);
+
+	private static VdfObject Parse(string text, bool preserveEntries)
 	{
 		if (text is null)
 		{
@@ -29,7 +33,7 @@ public static class VdfParser
 		}
 
 		var tokenizer = new Tokenizer(text);
-		var obj = ParseObject(tokenizer, endOnRBrace: false);
+		var obj = ParseObject(tokenizer, endOnRBrace: false, preserveEntries);
 
 		var token = tokenizer.Peek();
 		if (token.Kind is not TokenKind.Eof)
@@ -40,9 +44,15 @@ public static class VdfParser
 		return obj;
 	}
 
-	private static VdfObject ParseObject(Tokenizer tokenizer, bool endOnRBrace)
+	private static VdfObject ParseObject(Tokenizer tokenizer, bool endOnRBrace, bool preserveEntries, int depth = 0)
 	{
+		if (depth > 128)
+		{
+			throw new InvalidDataException("VDF nesting is too deep.");
+		}
+
 		var properties = new Dictionary<string, VdfValue>(StringComparer.Ordinal);
+		var entries = preserveEntries ? new List<KeyValuePair<string, VdfValue>>() : null;
 
 		while (true)
 		{
@@ -64,21 +74,22 @@ public static class VdfParser
 			}
 
 			var key = tokenizer.ReadString();
-			var next = tokenizer.Peek();
-
-			if (next.Kind == TokenKind.LBrace)
+			VdfValue value;
+			if (tokenizer.Peek().Kind == TokenKind.LBrace)
 			{
 				tokenizer.Read(); // consume '{'
-				var child = ParseObject(tokenizer, endOnRBrace: true);
-				properties[key] = child;
-				continue;
+				value = ParseObject(tokenizer, endOnRBrace: true, preserveEntries, depth + 1);
+			}
+			else
+			{
+				value = new VdfString(tokenizer.ReadString());
 			}
 
-			var value = tokenizer.ReadString();
-			properties[key] = new VdfString(value);
+			properties[key] = value;
+			entries?.Add(new KeyValuePair<string, VdfValue>(key, value));
 		}
 
-		return new VdfObject(properties);
+		return new VdfObject(properties) { OrderedEntries = entries };
 	}
 
 	private enum TokenKind

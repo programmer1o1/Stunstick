@@ -22,7 +22,9 @@ internal static class SteamPipeClient
 		DateTimeOffset? CreatedAtUtc,
 		DateTimeOffset? UpdatedAtUtc,
 		WorkshopPublishVisibility? Visibility,
-		IReadOnlyList<string> Tags);
+		IReadOnlyList<string> Tags,
+		ulong? OwnerSteamId,
+		string? OwnerName);
 
 	public sealed record SteamPipeListResult(
 		uint AppId,
@@ -270,7 +272,9 @@ internal static class SteamPipeClient
 							CreatedAtUtc: createdAtUtc,
 							UpdatedAtUtc: updatedAtUtc,
 							Visibility: parsedVisibility,
-							Tags: tags));
+							Tags: tags,
+							OwnerSteamId: ReadUInt64(element, "ownerSteamId") is ulong ownerSteamId and > 0 ? ownerSteamId : null,
+							OwnerName: ReadString(element, "ownerName")));
 					}
 				}
 

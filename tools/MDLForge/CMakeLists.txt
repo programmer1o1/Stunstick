@@ -17,6 +17,7 @@ option(
     "Link the MSVC runtime statically (/MT) for easier redistribution"
     OFF
 )
+option(MDLFORGE_BUILD_VPHYSICS "Build the portable collision library" ${APPLE})
 if(STUDIOMDL_REQUIRE_32BIT AND CMAKE_SIZEOF_VOID_P EQUAL 8)
     message(
         FATAL_ERROR
@@ -26,5 +27,9 @@ if(STUDIOMDL_REQUIRE_32BIT AND CMAKE_SIZEOF_VOID_P EQUAL 8)
     )
 endif()
 
-# Build only the studiomdl tool.
 add_subdirectory(utils/studiomdl)
+
+if(MDLFORGE_BUILD_VPHYSICS)
+    set_target_properties(studiomdl_mathlib PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    add_subdirectory(vendor/vphysics)
+endif()

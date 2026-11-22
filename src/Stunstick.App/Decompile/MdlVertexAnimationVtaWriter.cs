@@ -103,7 +103,6 @@ internal static class MdlVertexAnimationVtaWriter
 		DecompileOptions options,
 		CancellationToken cancellationToken)
 	{
-		var format = CultureInfo.InvariantCulture;
 		var timePrefix = DecompileFormat.GetTimePrefix(options);
 
 		await writer.WriteLineAsync("vertexanimation");
@@ -123,12 +122,7 @@ internal static class MdlVertexAnimationVtaWriter
 			var normal = vertex.Normal;
 			TransformForStaticProp(model.Header.Flags, ref position, ref normal);
 
-			await writer.WriteLineAsync(string.Format(
-				format,
-				"    {0} {1:0.000000} {2:0.000000} {3:0.000000} {4:0.000000} {5:0.000000} {6:0.000000}",
-				vertexIndex,
-				position.X, position.Y, position.Z,
-				normal.X, normal.Y, normal.Z));
+			await writer.WriteLineAsync(FormatVertexAnimationLine(vertexIndex, position, normal));
 		}
 
 		for (var frameIndex = 1; frameIndex < flexFrames.Count; frameIndex++)
@@ -170,20 +164,23 @@ internal static class MdlVertexAnimationVtaWriter
 
 					TransformForStaticProp(model.Header.Flags, ref delta, ref nDelta);
 
-					var position = basePosition + delta;
-					var normal = baseNormal + nDelta;
-
-					await writer.WriteLineAsync(string.Format(
-						format,
-						"    {0} {1:0.000000} {2:0.000000} {3:0.000000} {4:0.000000} {5:0.000000} {6:0.000000}",
-						absoluteVertexIndex,
-						position.X, position.Y, position.Z,
-						normal.X, normal.Y, normal.Z));
+					await writer.WriteLineAsync(FormatVertexAnimationLine(absoluteVertexIndex, basePosition, baseNormal, delta, nDelta));
 				}
 			}
 		}
 
 		await writer.WriteLineAsync("end");
+	}
+
+	private static string FormatVertexAnimationLine(int vertexIndex, Vector3 position, Vector3 normal,
+		Vector3 positionDelta = default, Vector3 normalDelta = default)
+	{
+		// Add flex deltas in double precision, as Crowbar does, before rounding to six decimal places.
+		return string.Format(CultureInfo.InvariantCulture,
+			"    {0} {1:0.000000} {2:0.000000} {3:0.000000} {4:0.000000} {5:0.000000} {6:0.000000}",
+			vertexIndex,
+			(double)position.X + positionDelta.X, (double)position.Y + positionDelta.Y, (double)position.Z + positionDelta.Z,
+			(double)normal.X + normalDelta.X, (double)normal.Y + normalDelta.Y, (double)normal.Z + normalDelta.Z);
 	}
 
 	private static void TransformForStaticProp(int mdlFlags, ref Vector3 position, ref Vector3 normal)

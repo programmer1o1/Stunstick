@@ -1,35 +1,47 @@
-# Stunstick cross-platform notes
+# Platform and toolchain guide
 
-This repo contains both:
+Use the .NET 8 runtime to run a release or the .NET 8 SDK to build Stunstick. The [release ZIPs](https://github.com/programmer1o1/Stunstick/releases) are framework-dependent.
 
-- **Stunstick (cross-platform, .NET 8):** `Stunstick.CrossPlatform.sln` (CLI + Avalonia Desktop UI under `src/`)
-- **Original Crowbar (Windows-only):** `Crowbar.sln` (VB.NET WinForms on .NET Framework 4)
+| Platform | Toolchain setup |
+| --- | --- |
+| Windows x64 | Use your game’s `studiomdl.exe` and `hlmv.exe` where available. |
+| macOS Intel or Apple Silicon | The release includes bundled StudioMDL and `libvphysics.dylib` for supported Source collision builds. On Apple Silicon, StudioMDL requires Rosetta. |
+| Linux x64 | Use a compatible native toolchain or configure Wine or Proton for Windows game tools. To use bundled StudioMDL from source, build it locally. |
 
-The Stunstick projects are designed to run on Windows, Linux, and macOS.
+## Configure a game
 
-**Status: Experimental.** These cross-platform builds are early and may change rapidly.
+Open **Games** and select a Steam preset or create a custom preset. Set the game or mod folder containing `gameinfo.txt` and the relevant tool paths. A game-specific StudioMDL is useful when the target engine expects its own MDL version or QC commands.
 
-## Build
+The bundled macOS compiler can produce `.phy` from `$collisionmodel` and `$collisionjoints` using its companion library. For other collision toolchains, check the [StudioMDL setup and limits](tools/studiomdl/README.md).
 
-Prereq: install the .NET 8 SDK.
+## CLI
 
-From the repo root:
+Run these examples from the CLI directory or add that directory to your shell’s path. On Windows the executable is `stunstick.exe`. Paths are illustrative.
 
-- Build: `dotnet build Stunstick.CrossPlatform.sln`
-- Run CLI: `dotnet run --project src/Stunstick.Cli -- --help`
-- Run Desktop: `dotnet run --project src/Stunstick.Desktop`
+```sh
+stunstick inspect models/prop.mdl
+stunstick decompile --mdl models/prop.mdl --out work
+stunstick compile --qc work/prop/model.qc --game /path/to/mod
+stunstick view --mdl /path/to/mod/models/prop.mdl --game /path/to/mod
+```
 
-## Toolchain notes
+To use a specific compiler, pass `--studiomdl /path/to/studiomdl`. Use `--hlmv` for a specific model viewer. Run `stunstick --help` for options including Steam presets and Wine overrides.
 
-Stunstick can launch Source toolchain tools (like `studiomdl`) from:
+### Archives
 
-- Your game install (preferred when available), or
-- A bundled `studiomdl` under `tools/studiomdl/` (optional; see `tools/studiomdl/README.md`)
+```sh
+stunstick unpack --in pak01_dir.vpk --out extracted --verify
+stunstick pack --in addon --out example.gma
+stunstick unpack --in example.gma --out checked --verify
+```
 
-On Linux/macOS, some workflows (especially collision models / `.phy`) may still require a Windows `studiomdl.exe` via Wine/Proton, depending on the game’s toolchain modules.
+For split VPKs, keep the numbered archives beside the directory VPK. GMA packing uses `addon.json` as metadata and can generate it when needed. The archive stores that metadata in its header.
 
-## Docs
+### Decompile output
 
-- `README.md` — overview + build commands
-- `FAQ.md` — common questions
-- `parity.md` — parity tracker vs original Crowbar
+By default, output goes in a per-model folder under `--out`. It can include `model.qc`, `skeleton.smd`, reference and LOD SMDs, animation and physics SMDs, flex VTA, procedural VRD, GoldSource texture BMPs, and a manifest. Files depend on the model and the selected options. Keep the output folder together when compiling so QC includes and SMD references resolve.
+
+## See also
+
+- [Build and launch Stunstick](README.md#build-from-source)
+- [Supported model formats and checks against Crowbar](parity.md#mdl-format-coverage)

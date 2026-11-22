@@ -288,6 +288,31 @@ static void WriteBoneInfo( studiohdr_t *phdr )
 		ALIGN4( pData );
 	}
 
+	// write jiggle bones ($jigglebone)
+	if (g_numjigglebones)
+	{
+		mstudiojigglebone_t *pProc = (mstudiojigglebone_t *)pData;
+		int nWritten = 0;
+		for (i = 0; i < g_numjigglebones; i++)
+		{
+			k = findGlobalBone( g_jigglebones[i].bonename );
+			if (k < 0 || k >= g_numbones)
+			{
+				MdlWarning( "$jigglebone \"%s\": no such bone in the model, ignored\n", g_jigglebones[i].bonename );
+				continue;
+			}
+			pProc[nWritten] = g_jigglebones[i].data;
+			pbone[k].procindex		= (byte *)&pProc[nWritten] - (byte *)&pbone[k];
+			pbone[k].proctype		= STUDIO_PROC_JIGGLE;
+			pbone[k].flags			|= BONE_ALWAYS_PROCEDURAL;
+			nWritten++;
+		}
+		pData += nWritten * sizeof( mstudiojigglebone_t );
+		ALIGN4( pData );
+		if (!g_quiet)
+			printf( "jiggle bones: %d\n", nWritten );
+	}
+
 	// map g_bonecontroller to bones
 	for (i = 0; i < g_numbones; i++) 
 	{
@@ -2308,6 +2333,7 @@ hasData:
 typedef struct
 {
 	int meshVertID;
+	int poolIndex;
 	int	finalMeshVertID;
 	int	vertexOffset;
 	int	lodFlags;
@@ -2322,7 +2348,7 @@ typedef struct
 typedef struct
 {
 	usedVertex_t	*pVertexList;
-	short			*pVertexMap;
+	int				*pVertexMap;
 	int				numVertexes;
 	lodMeshInfo_t	lodMeshInfo;
 } vertexPool_t;
@@ -2432,7 +2458,7 @@ bool BuildSortedVertexList(const studiohdr_t *pStudioHdr, const void *pVtxBuff, 
 	vertexPool_t						*pPool;
 	usedVertex_t						*pVertexList;
 	int									*pVertexes;
-	short								*pVertexMap;
+	int									*pVertexMap;
 	int									index;
 	int									currLod;
 	int									vertexOffset;
@@ -2504,7 +2530,7 @@ bool BuildSortedVertexList(const studiohdr_t *pStudioHdr, const void *pVtxBuff, 
 				if (numMeshVertexes)
 				{
 					usedVertexes = (usedVertex_t*)malloc(numMeshVertexes*sizeof(usedVertex_t));
-					pVertexMap   = (short*)malloc(numMeshVertexes*sizeof(short));
+					pVertexMap   = (int*)malloc(numMeshVertexes*sizeof(int));
 
 					for (n=0; n<numMeshVertexes; n++)
 					{
@@ -2513,6 +2539,7 @@ bool BuildSortedVertexList(const studiohdr_t *pStudioHdr, const void *pVtxBuff, 
 						// a linear layout of the vertexes requires a unique signature to achieve a remap
 						// the offset and index form a unique signature
 						usedVertexes[n].meshVertID      = n;
+						usedVertexes[n].poolIndex       = numVertexPools;
 						usedVertexes[n].finalMeshVertID = -1;
 						usedVertexes[n].vertexOffset    = vertexOffset;
 						usedVertexes[n].lodFlags        = 0;
@@ -2613,22 +2640,11 @@ bool BuildSortedVertexList(const studiohdr_t *pStudioHdr, const void *pVtxBuff, 
 	// the vtx file indexes get remapped to the new sort order
 	qsort(pVertexList, numVertexes, sizeof(usedVertex_t), _CompareUsedVertexes);
 	
-	// build a mapping table from mesh relative indexes to the flat lod sorted array
-	vertexOffset = 0;
-	for (i=0; i<numVertexPools; i++)
+	// Use the owning pool to map each mesh-local index to its position in the sorted VVD.
+	for (k=0; k<numVertexes; k++)
 	{
-		pPool = &pVertexPools[i];
-		for (j=0; j<pPool->numVertexes; j++)
-		{
-			// scan flattened sorted vertexes
-			for (k=0; k<numVertexes; k++)
-			{
-				if (pVertexList[k].vertexOffset == vertexOffset && pVertexList[k].meshVertID == j)
-					break;
-			}
-			pPool->pVertexMap[j] = k;
-		}
-		vertexOffset += pPool->numVertexes;
+		const usedVertex_t &vertex = pVertexList[k];
+		pVertexPools[vertex.poolIndex].pVertexMap[vertex.meshVertID] = k;
 	}
 
 	// build offsets and counts that identifies mesh's distribution across lods
